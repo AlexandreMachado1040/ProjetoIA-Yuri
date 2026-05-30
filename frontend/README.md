@@ -1,4 +1,30 @@
-# React + Vite
+# Frontend — Motor PVSyst
+
+Interface React + Vite que consome a API de simulação fotovoltaica.
+
+## Configuração da API (Cloudflare Worker)
+
+O frontend está apontado para o **Cloudflare Worker** `motor-pvsyst`. Defina a URL
+do seu worker antes de rodar:
+
+```bash
+cp .env.example .env          # ou .env.local
+# edite VITE_WORKER_URL com o seu subdomínio .workers.dev
+npm install
+npm run dev
+```
+
+A URL do worker fica em `VITE_WORKER_URL` (veja `.env.example`). Se não for
+definida, o código usa um placeholder que **não funciona** até ser ajustado.
+
+> Observação: o worker é uma versão **rápida/síncrona** do motor. KPIs principais,
+> produção mensal e irradiância funcionam; **histograma, diagrama de perdas e
+> download de PDF** não são fornecidos pelo worker e aparecem vazios na interface.
+> Para a experiência completa, use o backend FastAPI (`backend/`).
+
+---
+
+## React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
