@@ -13,7 +13,7 @@ import axios from 'axios'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const WORKER_URL = (
-  import.meta.env.VITE_WORKER_URL || 'https://motor-pvsyst.SEU-SUBDOMINIO.workers.dev'
+  import.meta.env.VITE_WORKER_URL || 'https://motor-pvsyst.alexandreclm.workers.dev'
 ).replace(/\/+$/, '')
 
 const api = axios.create({
