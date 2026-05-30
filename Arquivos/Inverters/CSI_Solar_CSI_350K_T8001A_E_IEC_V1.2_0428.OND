@@ -1,0 +1,144 @@
+﻿PVObject_=pvGInverter
+  Comment=CSI Solar Inc	CSI-350K-T8001A-E	Manufacturer 2023
+  Version=7.4.0
+  ParObj1=2012
+  Flags=$00301540
+
+  PVObject_Commercial=pvCommercial
+    Flags=$0041
+    Manufacturer=CSI Solar Inc
+    Model=CSI-350K-T8001A-E
+    DataSource=Manufacturer 2023
+    YearBeg=2012
+    Width=1.130
+    Height=0.894
+    Depth=0.372
+    Weight=120.000
+    NPieces=100
+    PriceDate=26/10/22 10:41
+    Remarks, Count=4
+      Str_1=技术: 10 kHz, IGBT
+      Str_2=保护: IP 20
+      Str_3=控制: LCD Graphic, datalogging
+      Str_4=Generic device for DEMO
+    End of Remarks=Generic device for DEMO
+  End of PVObject pvCommercial
+  Transfo=Without
+
+  Converter=TConverter
+    PNomConv=350.000
+    PMaxOUT=350.000
+    VOutConv=800.0
+    VMppMin=500
+    VMPPMax=1500
+    VAbsMax=1500
+    PSeuil=1732.50
+    EfficMax=97.50
+    EfficEuro=96.80
+    FResNorm=3.00
+    ModeOper=MPPT
+    CompPMax=Lim
+    CompVMax=Lim
+    MonoTri=Tri
+    ModeAffEnum=Efficf_PIn
+    UnitAffEnum=kW
+    IDCMax=0.000
+    IMaxDC=480.000
+    INomAC=254.000
+    IMaxAC=254.000
+    TPNom=35.0
+    TPMax=25.0
+    TPLim1=60.0
+    PInEffMax =210000.000
+    PThreshEff=716.10
+    HasdefaultPThresh=True
+
+    ProfilPIO=TCubicProfile
+      NPtsMax=11
+      NPtsEff=8
+      LastCompile=$008D
+      Mode=1
+      Point_1=1733,0
+      Point_2=10500,9752
+      Point_3=17500,16726
+      Point_4=35000,34151
+      Point_5=70000,68960
+      Point_6=105000,103712
+      Point_7=210000,207627
+      Point_8=350000,345387
+      Point_9=0,0
+      Point_10=0,0
+      Point_11=0,0
+    End of TCubicProfile
+    VNomEff=880.0,1200.0,1300.0,
+    EfficMaxV=98.300,99.010,98.870,
+    EfficEuroV=98.000,98.800,98.600,
+
+    ProfilPIOV1=TCubicProfile
+      NPtsMax=11
+      NPtsEff=9
+      LastCompile=$8089
+      Mode=1
+      Point_1=1732.5,0.0
+      Point_2=17500.0,16931.3
+      Point_3=35000.0,34244.0
+      Point_4=70000.0,68803.0
+      Point_5=87500.0,86100.0
+      Point_6=105000.0,103435.5
+      Point_7=175000.0,172532.5
+      Point_8=262500.0,258667.5
+      Point_9=350000.0,344330.0
+      Point_10=0.0,0.0
+      Point_11=0.0,0.0
+    End of TCubicProfile
+
+    ProfilPIOV2=TCubicProfile
+      NPtsMax=11
+      NPtsEff=9
+      LastCompile=$8089
+      Mode=1
+      Point_1=1732.5,0.0
+      Point_2=17500.0,17078.2
+      Point_3=35000.0,34478.5
+      Point_4=70000.0,69216.0
+      Point_5=87500.0,86555.0
+      Point_6=105000.0,103960.5
+      Point_7=175000.0,173232.5
+      Point_8=262500.0,259455.0
+      Point_9=350000.0,345380.0
+      Point_10=0.0,0.0
+      Point_11=0.0,0.0
+    End of TCubicProfile
+
+    ProfilPIOV3=TCubicProfile
+      NPtsMax=11
+      NPtsEff=9
+      LastCompile=$8089
+      Mode=1
+      Point_1=1732.5,0.0
+      Point_2=17500.0,17041.5
+      Point_3=35000.0,34440.0
+      Point_4=70000.0,69202.0
+      Point_5=87500.0,86563.8
+      Point_6=105000.0,103908.0
+      Point_7=175000.0,173197.5
+      Point_8=262500.0,259507.5
+      Point_9=350000.0,345485.0
+      Point_10=0.0,0.0
+      Point_11=0.0,0.0
+    End of TCubicProfile
+  End of TConverter
+  NbInputs=24
+  NbMPPT=12
+  TanPhiMin=-0.142
+  TanPhiMax=0.142
+  NbMSInterne=2
+  MasterSlave=No_M_S
+  IsolSurvey =Yes
+  DC_Switch=Yes
+  AC_Switch=No
+  DiscAdjust=Yes
+  ENS_Protec=Yes
+  MS_Thresh=0.8
+  Night_Loss=15.00
+End of PVObject pvGInverter

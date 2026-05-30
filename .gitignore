@@ -1,0 +1,40 @@
+﻿# Cache e dados temporários
+nasa_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Relatórios gerados
+Relatorio_PVSyst_*.pdf
+Relatorio_PVSyst_*.json
+relatorios/
+
+# Imagens de saída geradas
+*_FT_map.png
+comparativo_*.png
+
+# Planilhas
+*.xlsx
+
+# Ambiente Python
+.venv/
+venv/
+.env
+
+# Wrangler / Node
+.wrangler/
+node_modules/
+.dev.vars
+
+# Build do frontend
+frontend/dist/
+frontend/node_modules/
+
+# Claude Code
+.claude/
+
+# Sistema
+.DS_Store
+Thumbs.db
+Arquivos.zip

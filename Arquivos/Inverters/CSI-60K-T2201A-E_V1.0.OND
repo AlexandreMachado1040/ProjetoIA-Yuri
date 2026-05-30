@@ -1,0 +1,137 @@
+﻿PVObject_=pvGInverter
+  Comment=CSI Solar Co., Ltd.	CSI-60K-T2201A-E	Manufacturer
+  Version=7.4.6
+  Flags=$00181561
+
+  PVObject_Commercial=pvCommercial
+    Comment=CSI Solar Co., Ltd.
+    Flags=$0041
+    Manufacturer=CSI Solar Co., Ltd.
+    Model=CSI-60K-T2201A-E
+    DataSource=Manufacturer
+    Width=0.720
+    Height=0.555
+    Depth=0.280
+    Weight=90.000
+    NPieces=100
+    PriceDate=08/04/24 15:22
+  End of PVObject pvCommercial
+  Transfo=Without
+
+  Converter=TConverter
+    PNomConv=60.000
+    PMaxOUT=60.000
+    VOutConv=220.0
+    VMppMin=200
+    VMPPMax=1000
+    VAbsMax=1100
+    PSeuil=250.00
+    EfficMax=0.00
+    EfficEuro=0.00
+    FResNorm=3.00
+    ModeOper=MPPT
+    CompPMax=Lim
+    CompVMax=Lim
+    MonoTri=Tri
+    ModeAffEnum=Efficf_PIn
+    UnitAffEnum=kW
+    IDCMax=0.000
+    INomAC=157.500
+    IMaxAC=157.500
+    TPNom=45.0
+    TPMax=25.0
+    TPLim1=50.0
+    TPLimAbs=60.0
+    PLim1=56.640
+    PLimAbs=49.980
+    PInEffMax =30000.000
+    HasdefaultPThresh=False
+
+    ProfilPIO=TCubicProfile
+      NPtsMax=11
+      NPtsEff=8
+      LastCompile=$008D
+      Mode=1
+      Point_1=250,0
+      Point_2=1500,1429
+      Point_3=2500,2384
+      Point_4=5000,4780
+      Point_5=10000,9608
+      Point_6=15000,14484
+      Point_7=30000,29400
+      Point_8=50000,49000
+      Point_9=0,0
+      Point_10=0,0
+      Point_11=0,0
+    End of TCubicProfile
+    VNomEff=370.0,560.0,750.0,
+    EfficMaxV=70.000,99.000,98.000,
+    EfficEuroV=99.600,99.600,99.600,
+
+    ProfilPIOV1=TCubicProfile
+      NPtsMax=11
+      NPtsEff=9
+      LastCompile=$8089
+      Mode=1
+      Point_1=250.0,0.0
+      Point_2=3000.0,2843.1
+      Point_3=6000.0,5787.6
+      Point_4=12000.0,11661.6
+      Point_5=15000.0,14589.0
+      Point_6=18000.0,17514.0
+      Point_7=30000.0,29160.0
+      Point_8=45000.0,43591.5
+      Point_9=60000.0,57960.0
+      Point_10=0.0,0.0
+      Point_11=0.0,0.0
+    End of TCubicProfile
+
+    ProfilPIOV2=TCubicProfile
+      NPtsMax=11
+      NPtsEff=9
+      LastCompile=$8089
+      Mode=1
+      Point_1=250.0,0.0
+      Point_2=3000.0,2813.7
+      Point_3=6000.0,5716.2
+      Point_4=12000.0,11598.0
+      Point_5=15000.0,14524.5
+      Point_6=18000.0,17442.0
+      Point_7=30000.0,29064.0
+      Point_8=45000.0,43488.0
+      Point_9=60000.0,57828.0
+      Point_10=0.0,0.0
+      Point_11=0.0,0.0
+    End of TCubicProfile
+
+    ProfilPIOV3=TCubicProfile
+      NPtsMax=11
+      NPtsEff=9
+      LastCompile=$8089
+      Mode=1
+      Point_1=250.0,0.0
+      Point_2=3000.0,2740.5
+      Point_3=6000.0,5698.8
+      Point_4=12000.0,11523.6
+      Point_5=15000.0,14455.5
+      Point_6=18000.0,17373.6
+      Point_7=30000.0,28977.0
+      Point_8=45000.0,43371.0
+      Point_9=60000.0,57690.0
+      Point_10=0.0,0.0
+      Point_11=0.0,0.0
+    End of TCubicProfile
+  End of TConverter
+  NbInputs=12
+  NbMPPT=6
+  TanPhiMin=-0.750
+  TanPhiMax=0.750
+  NbMSInterne=2
+  MasterSlave=No_M_S
+  IsolSurvey =Yes
+  DC_Switch=Yes
+  AC_Switch=No
+  ENS_Protec=Yes
+  MS_Thresh=0.8
+  Night_Loss=0.23
+End of PVObject pvGInverter
