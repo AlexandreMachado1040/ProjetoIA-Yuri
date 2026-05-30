@@ -55,7 +55,7 @@ _DOCS = {
 
 
 def _json_response(data, status=200):
-    hdrs = Headers.new({**_CORS, "Content-Type": "application/json"}.items())
+    hdrs = Headers.new({**_CORS, "Content-Type": "application/json; charset=utf-8"}.items())
     return Response.new(json.dumps(data, ensure_ascii=False), status=status, headers=hdrs)
 
 
