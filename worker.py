@@ -21,7 +21,9 @@ _DEFAULTS = dict(
     N_s=28, N_strings=3,
     bifacial=True,
     albedo=0.30, pitch=2.826, mod_height=2.0,
-    N_seg=5, N_rays=36,
+    # N_seg=0 desativa ray-tracing (usa ganho bifacial estimado analítico)
+    # Aumentar N_seg/N_rays para maior precisão (mais CPU — verificar Workers limits)
+    N_seg=0, N_rays=0,
     modulo="CS7N-730TB-AG",
     inversor="CSI-250K-T8001A-E",
 )
@@ -96,53 +98,55 @@ async def on_fetch(request, env):
     # POST /simulate
     if method == "POST" and path in ("/simulate", "/"):
         try:
-            body = await request.json()
+            # Usa text() + json.loads para garantir dict Python (não JsProxy)
+            raw_text = await request.text()
+            body = json.loads(raw_text)
         except Exception:
             return _error("Body JSON inválido")
 
-        # Mescla defaults com os parâmetros recebidos
-        p = {**_DEFAULTS, **{k: v for k, v in body.items() if v is not None}}
-
-        # Resolve módulo
-        mod_key = p.get("modulo", "CS7N-730TB-AG")
-        if isinstance(mod_key, str):
-            mod = CATALOGO_MODULOS.get(mod_key)
-            if mod is None:
-                return _error(f"Módulo '{mod_key}' não encontrado. Disponíveis: {list(CATALOGO_MODULOS)}")
-        else:
-            mod = mod_key  # aceita dict completo
-
-        # Resolve inversor
-        inv_key = p.get("inversor", "CSI-250K-T8001A-E")
-        if isinstance(inv_key, str):
-            inv = CATALOGO_INVERSORES.get(inv_key)
-            if inv is None:
-                return _error(f"Inversor '{inv_key}' não encontrado. Disponíveis: {list(CATALOGO_INVERSORES)}")
-        else:
-            inv = inv_key
-
-        params = {
-            "lat":        float(p["lat"]),
-            "lon":        float(p["lon"]),
-            "tz":         int(p["tz"]),
-            "tilt":       float(p["tilt"]),
-            "az":         float(p["az"]),
-            "N_s":        int(p["N_s"]),
-            "N_strings":  int(p["N_strings"]),
-            "bifacial":   bool(p["bifacial"]),
-            "albedo":     float(p["albedo"]),
-            "pitch":      float(p["pitch"]),
-            "mod_height": float(p["mod_height"]),
-            "N_seg":      min(int(p.get("N_seg", 5)),  15),
-            "N_rays":     min(int(p.get("N_rays", 36)), 90),
-            "modulo":     mod,
-            "inversor":   inv,
-        }
-
         try:
+            # Mescla defaults com os parâmetros recebidos
+            p = {**_DEFAULTS, **{k: v for k, v in body.items() if v is not None}}
+
+            # Resolve módulo
+            mod_key = p.get("modulo", "CS7N-730TB-AG")
+            if isinstance(mod_key, str):
+                mod = CATALOGO_MODULOS.get(mod_key)
+                if mod is None:
+                    return _error(f"Módulo '{mod_key}' não encontrado. Disponíveis: {list(CATALOGO_MODULOS)}")
+            else:
+                mod = mod_key
+
+            # Resolve inversor
+            inv_key = p.get("inversor", "CSI-250K-T8001A-E")
+            if isinstance(inv_key, str):
+                inv = CATALOGO_INVERSORES.get(inv_key)
+                if inv is None:
+                    return _error(f"Inversor '{inv_key}' não encontrado. Disponíveis: {list(CATALOGO_INVERSORES)}")
+            else:
+                inv = inv_key
+
+            params = {
+                "lat":        float(p["lat"]),
+                "lon":        float(p["lon"]),
+                "tz":         int(p["tz"]),
+                "tilt":       float(p["tilt"]),
+                "az":         float(p["az"]),
+                "N_s":        int(p["N_s"]),
+                "N_strings":  int(p["N_strings"]),
+                "bifacial":   bool(p["bifacial"]),
+                "albedo":     float(p["albedo"]),
+                "pitch":      float(p["pitch"]),
+                "mod_height": float(p["mod_height"]),
+                "N_seg":      min(int(p.get("N_seg", 0)),  15),
+                "N_rays":     min(int(p.get("N_rays", 0)), 90),
+                "modulo":     mod,
+                "inversor":   inv,
+            }
+
             result = simulate_fast(params)
         except Exception as exc:
-            return _error(f"Erro na simulação: {exc}", status=500)
+            return _error(f"Erro na simulação: {type(exc).__name__}: {exc}", status=500)
 
         return _json_response(result)
 

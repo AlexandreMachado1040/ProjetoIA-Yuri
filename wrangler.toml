@@ -3,8 +3,5 @@ main = "worker.py"
 compatibility_date = "2024-12-18"
 compatibility_flags = ["python_workers"]
 
-# Workers Standard — até 30 s de CPU por request (necessário para simulação)
-usage_model = "standard"
-
 [observability]
 enabled = true

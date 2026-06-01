@@ -1,0 +1,15 @@
+frontend/
+backend/
+Arquivos/
+solar_model.py
+ft_solar_chart.py
+app_pvsyst.py
+motor_pvsyst_unificado.py
+parsers_pvsyst.py
+*.bat
+*.txt
+*.xlsx
+*.zip
+relatorios/
+nasa_cache/
+__pycache__/

@@ -8,10 +8,13 @@ Simulação rápida: 12 dias representativos × 24 h → equivalente a simulaç�
 
 import math
 import json
-import urllib.request
-import urllib.error
-import time
-import datetime
+
+try:
+    import urllib.request
+    import urllib.error
+    _HAS_URLLIB = True
+except ImportError:
+    _HAS_URLLIB = False
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constantes físicas e de calendário
@@ -44,7 +47,7 @@ _NASA_MONTH_KEYS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
 # 1. NASA POWER — busca e fallback
 # ─────────────────────────────────────────────────────────────────────────────
 
-def fetch_nasa_power_all(lat: float, lon: float, timeout: int = 25):
+def fetch_nasa_power_all(lat: float, lon: float, timeout: int = 4):
     """
     Busca GHI, DNI, DHI e T2M mensais climatológicos da NASA POWER em uma chamada.
     Usa cache em memória (_NASA_CACHE) sem I/O de disco.
@@ -52,6 +55,9 @@ def fetch_nasa_power_all(lat: float, lon: float, timeout: int = 25):
     Retorna dict {'ghi':{1..12}, 'dni':{1..12}, 'dhi':{1..12}, 't2m':{1..12}}
     com valores em kWh/m²/dia (irradiância) e °C (temperatura), ou None se falhar.
     """
+    if not _HAS_URLLIB:
+        return None
+
     key = (round(lat, 2), round(lon, 2))
     if key in _NASA_CACHE:
         return _NASA_CACHE[key]
