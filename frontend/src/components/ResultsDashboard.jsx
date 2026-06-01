@@ -14,22 +14,27 @@ export default function ResultsDashboard({ resultado }) {
     P_nom_stc_kWp,
     P_nom_AC_kW,
     monthly_GHI,
+    monthly_Gf,
+    monthly_E_arr,
     monthly_E_grid,
     modulo_nome,
     inversor_nome,
+    nasa_source,
   } = resultado
 
   const E_grid_MWh = +(E_grid_anual_kWh / 1000).toFixed(1)
   const Yf         = P_nom_stc_kWp > 0 ? +(E_grid_anual_kWh / P_nom_stc_kWp).toFixed(0) : 0
   const R_DC_AC    = P_nom_AC_kW   > 0 ? +(P_nom_stc_kWp    / P_nom_AC_kW).toFixed(2)   : 0
+  const bifacial   = ganho_bif_pct > 0
 
   return (
     <div className="results-dashboard">
       <div className="results-header">
         <h2>Resultados da Simulação</h2>
-        {modulo_nome && (
-          <span className="fonte-tag">{modulo_nome} · {inversor_nome}</span>
-        )}
+        <div className="header-tags">
+          {modulo_nome && <span className="fonte-tag">{modulo_nome} · {inversor_nome}</span>}
+          {nasa_source  && <span className="fonte-tag nasa">{nasa_source}</span>}
+        </div>
       </div>
 
       <div className="kpi-grid">
@@ -45,9 +50,16 @@ export default function ResultsDashboard({ resultado }) {
         <KPI label="R DC/AC"        value={R_DC_AC}                             color="gray" />
       </div>
 
-      <ProducaoMensalChart monthlyGridKwh={monthly_E_grid} />
+      <ProducaoMensalChart
+        monthlyGridKwh={monthly_E_grid}
+        monthlyArrKwh={monthly_E_arr}
+      />
 
-      <IrradianciaChart monthlyGHI={monthly_GHI} />
+      <IrradianciaChart
+        monthlyGHI={monthly_GHI}
+        monthlyGf={monthly_Gf}
+        bifacial={bifacial}
+      />
     </div>
   )
 }

@@ -64,7 +64,7 @@ def fetch_nasa_power_all(lat: float, lon: float, timeout: int = 4):
 
     url = (
         "https://power.larc.nasa.gov/api/temporal/climatology/point"
-        f"?parameters=ALLSKY_SFC_SW_DWN,ALLSKY_SFC_SW_DNI,ALLSKY_SFC_SW_DIF,T2M"
+        f"?parameters=ALLSKY_SFC_SW_DWN,ALLSKY_SFC_SW_DNI,ALLSKY_SFC_SW_DIFF,T2M"
         f"&community=RE&longitude={lon}&latitude={lat}&format=JSON"
     )
     try:
@@ -76,7 +76,7 @@ def fetch_nasa_power_all(lat: float, lon: float, timeout: int = 4):
         for nome, nasa_key in [
             ('ghi', 'ALLSKY_SFC_SW_DWN'),
             ('dni', 'ALLSKY_SFC_SW_DNI'),
-            ('dhi', 'ALLSKY_SFC_SW_DIF'),
+            ('dhi', 'ALLSKY_SFC_SW_DIFF'),
             ('t2m', 'T2M'),
         ]:
             raw = param[nasa_key]
@@ -570,13 +570,26 @@ def simulate_fast(params: dict) -> dict:
     f_DC = 0.9320   # ≈ 1 − 0.0615 − 0.0073 − 0.0174 + 0.0033 − 0.0081 − 0.0196
 
     # ── Dados climatológicos NASA POWER ───────────────────────────────────────
-    nasa = build_nasa_data(lat, lon)
-    NASA_GHI = nasa['ghi']    # kWh/m²/dia por mês
-    NASA_T2M = nasa['t2m']    # °C por mês
+    nasa_override = params.get('nasa_data')
+    if nasa_override:
+        nasa = nasa_override
+        nasa_source = 'NASA POWER (ao vivo)'
+    else:
+        live = fetch_nasa_power_all(lat, lon)
+        if live:
+            nasa = live
+            nasa_source = 'NASA POWER'
+        else:
+            nasa = build_nasa_data(lat, lon)
+            nasa_source = 'Fallback climatológico'
+    NASA_GHI = nasa['ghi']
+    NASA_T2M = nasa['t2m']
 
     # ── Acumuladores ──────────────────────────────────────────────────────────
     monthly_GHI    = [0.0] * 12
+    monthly_Gf     = [0.0] * 12
     monthly_E_grid = [0.0] * 12
+    monthly_E_arr  = [0.0] * 12
     acc_Gf         = 0.0
     acc_Gb         = 0.0
     acc_GHI        = 0.0
@@ -595,6 +608,7 @@ def simulate_fast(params: dict) -> dict:
 
         day_GHI    = 0.0
         day_E_grid = 0.0
+        day_E_arr  = 0.0
         day_Gf     = 0.0
         day_Gb     = 0.0
 
@@ -639,19 +653,20 @@ def simulate_fast(params: dict) -> dict:
             eta_inv   = calc_eta_inv_generico(P_array, inv)
             E_grid_h  = P_array * eta_inv   # kWh (hora completa)
 
-            day_GHI    += GHI      # W/m² acumulado (÷1000 → kWh/m²)
+            day_GHI    += GHI
             day_Gf     += Gf
             day_Gb     += Gb
+            day_E_arr  += P_mpp      # kW × 1h = kWh (DC antes do inversor)
             day_E_grid += E_grid_h
 
-        # Escalonamento pelo número de dias do mês
-        # day_GHI em W·h/m² → kWh/m²/mês
         monthly_GHI[mi]    = (day_GHI / 1000.0) * n_days
+        monthly_Gf[mi]     = (day_Gf  / 1000.0) * n_days
+        monthly_E_arr[mi]  = day_E_arr  * n_days
         monthly_E_grid[mi] = day_E_grid * n_days
 
         acc_GHI    += monthly_GHI[mi]
         acc_E_grid += monthly_E_grid[mi]
-        acc_Gf     += (day_Gf / 1000.0) * n_days
+        acc_Gf     += monthly_Gf[mi]
         acc_Gb     += (day_Gb / 1000.0) * n_days
 
     # ── Performance Ratio ─────────────────────────────────────────────────────
@@ -676,9 +691,12 @@ def simulate_fast(params: dict) -> dict:
         'P_nom_stc_kWp':    round(P_nom_stc, 3),
         'P_nom_AC_kW':      round(P_nom_AC, 1),
         'monthly_GHI':      [round(v, 2) for v in monthly_GHI],
+        'monthly_Gf':       [round(v, 2) for v in monthly_Gf],
+        'monthly_E_arr':    [round(v, 1) for v in monthly_E_arr],
         'monthly_E_grid':   [round(v, 1) for v in monthly_E_grid],
         'modulo_nome':      mod.get('modelo', ''),
         'inversor_nome':    inv.get('modelo', ''),
+        'nasa_source':      nasa_source,
     }
 
 # ─────────────────────────────────────────────────────────────────────────────

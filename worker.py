@@ -5,7 +5,7 @@ GET  /         → documentação da API
 GET  /catalogo → lista de módulos e inversores disponíveis
 """
 
-from js import Response, Headers, URL
+from js import Response, Headers, URL, fetch as js_fetch
 import json
 from motor_core import simulate_fast, CATALOGO_MODULOS, CATALOGO_INVERSORES
 
@@ -21,37 +21,22 @@ _DEFAULTS = dict(
     N_s=28, N_strings=3,
     bifacial=True,
     albedo=0.30, pitch=2.826, mod_height=2.0,
-    # N_seg=0 desativa ray-tracing (usa ganho bifacial estimado analítico)
-    # Aumentar N_seg/N_rays para maior precisão (mais CPU — verificar Workers limits)
     N_seg=0, N_rays=0,
     modulo="CS7N-730TB-AG",
     inversor="CSI-250K-T8001A-E",
 )
 
+_NASA_MONTH_KEYS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+                    'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+
 _DOCS = {
     "name": "Motor PVSyst API",
-    "version": "1.0",
+    "version": "1.1",
     "description": "Simulação FV bifacial — Hay+Erbs+Ray-Tracing 2D. Dados climáticos: NASA POWER.",
     "endpoints": {
-        "POST /simulate": {
-            "body": _DEFAULTS,
-            "response": {
-                "E_grid_anual_kWh": "Energia anual injetada na rede [kWh]",
-                "PR_pct": "Performance Ratio [%]",
-                "GHI_anual": "Irradiância horizontal global anual [kWh/m²]",
-                "FT_frontal": "Fator de transposição frontal",
-                "FT_bifacial": "Fator de transposição bifacial (inclui G_rear)",
-                "ganho_bif_pct": "Ganho bifacial [%]",
-                "P_nom_stc_kWp": "Potência nominal do array [kWp]",
-                "P_nom_AC_kW": "Potência nominal do inversor [kW]",
-                "monthly_GHI": "GHI mensal [kWh/m²] (lista 12 meses)",
-                "monthly_E_grid": "Energia mensal na rede [kWh] (lista 12 meses)",
-                "modulo_nome": "Modelo do módulo usado",
-                "inversor_nome": "Modelo do inversor usado",
-            },
-        },
-        "GET /catalogo": "Lista módulos e inversores disponíveis",
-        "GET /": "Esta documentação",
+        "POST /simulate": {"body": _DEFAULTS},
+        "GET /catalogo":  "Lista módulos e inversores disponíveis",
+        "GET /":          "Esta documentação",
     },
 }
 
@@ -63,6 +48,31 @@ def _json_response(data, status=200):
 
 def _error(msg, status=400):
     return _json_response({"error": msg}, status=status)
+
+
+async def _fetch_nasa(lat: float, lon: float):
+    """Busca dados climatológicos da NASA POWER via js.fetch (Workers-compatible)."""
+    url = (
+        "https://power.larc.nasa.gov/api/temporal/climatology/point"
+        f"?parameters=ALLSKY_SFC_SW_DWN,ALLSKY_SFC_SW_DNI,ALLSKY_SFC_SW_DIFF,T2M"
+        f"&community=RE&longitude={lon}&latitude={lat}&format=JSON"
+    )
+    resp = await js_fetch(url)
+    if not resp.ok:
+        raise Exception(f"NASA HTTP {resp.status}")
+    text = await resp.text()
+    data = json.loads(text)
+    param = data["properties"]["parameter"]
+    result = {}
+    for nome, nasa_key in [
+        ('ghi', 'ALLSKY_SFC_SW_DWN'),
+        ('dni', 'ALLSKY_SFC_SW_DNI'),
+        ('dhi', 'ALLSKY_SFC_SW_DIFF'),
+        ('t2m', 'T2M'),
+    ]:
+        raw = param[nasa_key]
+        result[nome] = {i + 1: float(raw[k]) for i, k in enumerate(_NASA_MONTH_KEYS)}
+    return result
 
 
 async def on_fetch(request, env):
@@ -78,6 +88,14 @@ async def on_fetch(request, env):
     # GET /
     if method == "GET" and path == "/":
         return _json_response(_DOCS)
+
+    # GET /nasa-test — diagnóstico do fetch NASA
+    if method == "GET" and path == "/nasa-test":
+        try:
+            data = await _fetch_nasa(-23.55, -46.63)
+            return _json_response({"ok": True, "meses": list(data.get("ghi", {}).values())[:3]})
+        except Exception as e:
+            return _json_response({"ok": False, "error": str(e), "tipo": type(e).__name__})
 
     # GET /catalogo
     if method == "GET" and path == "/catalogo":
@@ -98,14 +116,12 @@ async def on_fetch(request, env):
     # POST /simulate
     if method == "POST" and path in ("/simulate", "/"):
         try:
-            # Usa text() + json.loads para garantir dict Python (não JsProxy)
             raw_text = await request.text()
             body = json.loads(raw_text)
         except Exception:
             return _error("Body JSON inválido")
 
         try:
-            # Mescla defaults com os parâmetros recebidos
             p = {**_DEFAULTS, **{k: v for k, v in body.items() if v is not None}}
 
             # Resolve módulo
@@ -126,9 +142,19 @@ async def on_fetch(request, env):
             else:
                 inv = inv_key
 
+            lat = float(p["lat"])
+            lon = float(p["lon"])
+
+            # Busca NASA POWER via js.fetch (async, nativo do Workers)
+            try:
+                nasa_data = await _fetch_nasa(lat, lon)
+            except Exception as e:
+                nasa_data = None
+                params['_nasa_err'] = f"{type(e).__name__}: {e}"
+
             params = {
-                "lat":        float(p["lat"]),
-                "lon":        float(p["lon"]),
+                "lat":        lat,
+                "lon":        lon,
                 "tz":         int(p["tz"]),
                 "tilt":       float(p["tilt"]),
                 "az":         float(p["az"]),
@@ -142,9 +168,12 @@ async def on_fetch(request, env):
                 "N_rays":     min(int(p.get("N_rays", 0)), 90),
                 "modulo":     mod,
                 "inversor":   inv,
+                "nasa_data":  nasa_data,   # None → simulate_fast usa fallback SP
             }
 
             result = simulate_fast(params)
+            if '_nasa_err' in params:
+                result['nasa_debug'] = params['_nasa_err']
         except Exception as exc:
             return _error(f"Erro na simulação: {type(exc).__name__}: {exc}", status=500)
 
