@@ -1,34 +1,28 @@
 import { useState } from 'react'
 import ConfigForm from './components/ConfigForm'
-import SimulationProgress from './components/SimulationProgress'
 import ResultsDashboard from './components/ResultsDashboard'
 import { submitSimulacao } from './api/client'
-import { useJobPoller } from './hooks/useJobPoller'
 import './App.css'
 
 export default function App() {
-  const [jobId, setJobId] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [erro, setErro] = useState(null)
-
-  const job = useJobPoller(jobId)
+  const [resultado, setResultado] = useState(null)
+  const [loading, setLoading]     = useState(false)
+  const [erro, setErro]           = useState(null)
 
   const handleSubmit = async (payload) => {
     setErro(null)
     setLoading(true)
+    setResultado(null)
     try {
       const data = await submitSimulacao(payload)
-      setJobId(data.job_id)
+      if (data.error) throw new Error(data.error)
+      setResultado(data)
     } catch (e) {
-      setErro(e?.response?.data?.detail ?? 'Erro ao iniciar simulação.')
+      setErro(e?.response?.data?.error ?? e?.message ?? 'Erro ao executar simulação.')
     } finally {
       setLoading(false)
     }
   }
-
-  const pdfUrl = job?.pdf_url
-    ? `http://localhost:8000${job.pdf_url}`
-    : null
 
   return (
     <div className="app">
@@ -44,11 +38,13 @@ export default function App() {
 
         <section className="content">
           {erro && <div className="error-banner">{erro}</div>}
-          {job && <SimulationProgress job={job} />}
-          {job?.status === 'done' && (
-            <ResultsDashboard resultado={job.resultado} pdfUrl={pdfUrl} />
+          {loading && (
+            <div className="empty-state">
+              <p>Simulando… aguarde.</p>
+            </div>
           )}
-          {!job && !loading && (
+          {resultado && <ResultsDashboard resultado={resultado} />}
+          {!resultado && !loading && !erro && (
             <div className="empty-state">
               <p>Preencha os parâmetros e clique em <strong>Simular</strong> para iniciar.</p>
             </div>
