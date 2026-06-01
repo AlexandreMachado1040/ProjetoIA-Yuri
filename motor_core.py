@@ -594,6 +594,14 @@ def simulate_fast(params: dict) -> dict:
     acc_Gb         = 0.0
     acc_GHI        = 0.0
     acc_E_grid     = 0.0
+    acc_E_arr      = 0.0
+    acc_E_stc      = 0.0   # energia teórica STC (Gb, sem perdas T nem DC)
+    acc_E_arr_noT  = 0.0   # energia DC sem perda de temperatura (só f_DC)
+
+    # Histograma: bins de 100 W/m² em Gf (0-100, 100-200, ..., 900-1000, >1000)
+    N_BINS = 11
+    hist_arr_acc   = [0.0] * N_BINS
+    hist_grid_acc  = [0.0] * N_BINS
 
     for m in range(1, 13):
         mi  = m - 1
@@ -606,11 +614,15 @@ def simulate_fast(params: dict) -> dict:
         Kd      = calc_daily_kd(doy, dly_GHI, lat)
         n_days  = DAYS_PER_MONTH[mi]
 
-        day_GHI    = 0.0
-        day_E_grid = 0.0
-        day_E_arr  = 0.0
-        day_Gf     = 0.0
-        day_Gb     = 0.0
+        day_GHI       = 0.0
+        day_E_grid    = 0.0
+        day_E_arr     = 0.0
+        day_E_stc     = 0.0
+        day_E_arr_noT = 0.0
+        day_Gf        = 0.0
+        day_Gb        = 0.0
+        day_hist_arr  = [0.0] * N_BINS
+        day_hist_grid = [0.0] * N_BINS
 
         for hour in range(24):
             GHI, DNI, DHI, HSun, AzSun, ENI = calc_ghi_hourly(
@@ -656,30 +668,67 @@ def simulate_fast(params: dict) -> dict:
             day_GHI    += GHI
             day_Gf     += Gf
             day_Gb     += Gb
-            day_E_arr  += P_mpp      # kW × 1h = kWh (DC antes do inversor)
+            day_E_arr  += P_mpp
             day_E_grid += E_grid_h
+
+            # Acumuladores para diagrama de perdas
+            day_E_stc     += max(G_norm * P_nom_stc, 0.0)
+            day_E_arr_noT += max(G_norm * P_nom_stc * f_DC, 0.0)
+
+            # Histograma por bin de Gf (100 W/m² por bin)
+            b = min(int(Gf // 100), N_BINS - 1) if Gf > 0 else 0
+            day_hist_arr[b]  += P_mpp
+            day_hist_grid[b] += E_grid_h
 
         monthly_GHI[mi]    = (day_GHI / 1000.0) * n_days
         monthly_Gf[mi]     = (day_Gf  / 1000.0) * n_days
         monthly_E_arr[mi]  = day_E_arr  * n_days
         monthly_E_grid[mi] = day_E_grid * n_days
 
-        acc_GHI    += monthly_GHI[mi]
-        acc_E_grid += monthly_E_grid[mi]
-        acc_Gf     += monthly_Gf[mi]
-        acc_Gb     += (day_Gb / 1000.0) * n_days
-
-    # ── Performance Ratio ─────────────────────────────────────────────────────
-    # PR = Yf / Yr_ref  onde Yr_ref = G_tilt_frontal / 1  (horas de pico)
-    Yf       = acc_E_grid / P_nom_stc if P_nom_stc > 0 else 0.0
-    Yr       = acc_Gf if acc_Gf > 0 else 1.0
-    PR_pct   = (Yf / Yr * 100.0) if Yr > 0 else 0.0
+        acc_GHI        += monthly_GHI[mi]
+        acc_E_grid     += monthly_E_grid[mi]
+        acc_E_arr      += monthly_E_arr[mi]
+        acc_Gf         += monthly_Gf[mi]
+        acc_Gb         += (day_Gb / 1000.0) * n_days
+        acc_E_stc      += day_E_stc      * n_days
+        acc_E_arr_noT  += day_E_arr_noT  * n_days
+        for b in range(N_BINS):
+            hist_arr_acc[b]  += day_hist_arr[b]  * n_days
+            hist_grid_acc[b] += day_hist_grid[b] * n_days
 
     # ── Fatores de transposição ───────────────────────────────────────────────
     FT_frontal  = acc_Gf  / acc_GHI if acc_GHI > 0 else 0.0
     FT_bifacial = acc_Gb  / acc_GHI if acc_GHI > 0 else 0.0
     ganho_bif   = ((FT_bifacial / FT_frontal - 1) * 100.0
                    if FT_frontal > 0 else 0.0)
+
+    # ── Performance Ratio ─────────────────────────────────────────────────────
+    Yf       = acc_E_grid / P_nom_stc if P_nom_stc > 0 else 0.0
+    Yr       = acc_Gf if acc_Gf > 0 else 1.0
+    PR_pct   = (Yf / Yr * 100.0) if Yr > 0 else 0.0
+
+    # ── Histograma ────────────────────────────────────────────────────────────
+    hist_bins = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110]
+
+    # ── Diagrama de perdas ────────────────────────────────────────────────────
+    loss_temp_pct = ((acc_E_arr_noT - acc_E_arr) / acc_E_arr_noT * 100.0
+                     if acc_E_arr_noT > 0 else 0.0)
+    loss_dc_pct   = (1.0 - f_DC) * 100.0
+    loss_inv_pct  = ((acc_E_arr - acc_E_grid) / acc_E_arr * 100.0
+                     if acc_E_arr > 0 else 0.0)
+
+    loss_chain = [
+        {'label': 'GHI horizontal',                       'value': round(acc_GHI, 1),           'unit': 'kWh/m²', 'tipo': 'total'},
+        {'label': 'G frontal inclinado',                   'value': round(acc_Gf, 1),            'unit': 'kWh/m²', 'tipo': 'total'},
+        {'label': 'Ganho bifacial',                        'value': round(ganho_bif, 2),         'unit': '%',       'tipo': 'bifacial'},
+        {'label': 'G efetivo bifacial',                    'value': round(acc_Gb, 1),            'unit': 'kWh/m²', 'tipo': 'total'},
+        {'label': 'E_Array STC (teórico)',                 'value': round(acc_E_stc / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
+        {'label': 'Perdas temperatura',                    'value': -round(loss_temp_pct, 1),    'unit': '%',       'tipo': 'perda'},
+        {'label': 'Perdas DC (mismatch+LID+ohm+soiling)', 'value': -round(loss_dc_pct, 1),      'unit': '%',       'tipo': 'perda'},
+        {'label': 'E_Array DC',                            'value': round(acc_E_arr / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
+        {'label': 'Perdas inversor',                       'value': -round(loss_inv_pct, 1),     'unit': '%',       'tipo': 'perda'},
+        {'label': 'E_Grid (rede)',                         'value': round(acc_E_grid / 1000, 1), 'unit': 'MWh',    'tipo': 'total'},
+    ]
 
     return {
         'E_grid_anual_kWh': round(acc_E_grid, 1),
@@ -694,6 +743,10 @@ def simulate_fast(params: dict) -> dict:
         'monthly_Gf':       [round(v, 2) for v in monthly_Gf],
         'monthly_E_arr':    [round(v, 1) for v in monthly_E_arr],
         'monthly_E_grid':   [round(v, 1) for v in monthly_E_grid],
+        'hist_bins':        hist_bins,
+        'hist_arr':         [round(v, 1) for v in hist_arr_acc],
+        'hist_grid':        [round(v, 1) for v in hist_grid_acc],
+        'loss_chain':       loss_chain,
         'modulo_nome':      mod.get('modelo', ''),
         'inversor_nome':    inv.get('modelo', ''),
         'nasa_source':      nasa_source,

@@ -1,5 +1,7 @@
 import ProducaoMensalChart from './ProducaoMensalChart'
 import IrradianciaChart    from './IrradianciaChart'
+import HistogramaChart     from './HistogramaChart'
+import LossDiagram         from './LossDiagram'
 
 export default function ResultsDashboard({ resultado }) {
   if (!resultado) return null
@@ -17,6 +19,10 @@ export default function ResultsDashboard({ resultado }) {
     monthly_Gf,
     monthly_E_arr,
     monthly_E_grid,
+    hist_bins,
+    hist_arr,
+    hist_grid,
+    loss_chain,
     modulo_nome,
     inversor_nome,
     nasa_source,
@@ -60,6 +66,14 @@ export default function ResultsDashboard({ resultado }) {
         monthlyGf={monthly_Gf}
         bifacial={bifacial}
       />
+
+      <HistogramaChart
+        bins={hist_bins}
+        histArr={hist_arr}
+        histGrid={hist_grid}
+      />
+
+      <LossDiagram lossChain={loss_chain} />
     </div>
   )
 }
