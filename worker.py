@@ -201,3 +201,10 @@ async def on_fetch(request, env):
             return _error(f"Erro ft-curve: {type(exc).__name__}: {exc}", status=500)
 
     return _error("Endpoint não encontrado", status=404)
+
+
+async def on_scheduled(event, env, ctx=None):
+    """Cron keep-warm: toca o catálogo em memória para manter o isolate aquecido
+    e reduzir o cold start do Python Worker entre simulações."""
+    _ = len(CATALOGO_MODULOS) + len(CATALOGO_INVERSORES)
+    return None

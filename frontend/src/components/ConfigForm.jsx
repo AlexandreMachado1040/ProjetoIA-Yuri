@@ -43,7 +43,9 @@ export default function ConfigForm({ onSubmit, loading }) {
       })
   }, [])
 
-  // Carrega catálogo + retry automático único se falhar (Worker cold start)
+  // Carrega catálogo. O client.js já faz retry com backoff e cai para um
+  // catálogo estático embutido se o Worker falhar — então a UI de erro abaixo
+  // só aparece em caso extremo (ex.: fallback também vazio).
   useEffect(() => {
     loadCatalog()
   }, [loadCatalog])

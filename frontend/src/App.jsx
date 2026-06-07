@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ConfigForm from './components/ConfigForm'
 import ResultsDashboard from './components/ResultsDashboard'
-import { submitSimulacao } from './api/client'
+import { submitSimulacao, prewarm } from './api/client'
 import './App.css'
 
 export default function App() {
@@ -9,6 +9,9 @@ export default function App() {
   const [loading, setLoading]     = useState(false)
   const [erro, setErro]           = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // Aquece o Worker assim que o app carrega, para evitar cold start na 1ª simulação.
+  useEffect(() => { prewarm() }, [])
 
   const handleSubmit = async (payload) => {
     setErro(null)
@@ -20,7 +23,12 @@ export default function App() {
       setResultado(data)
       setSidebarOpen(false)
     } catch (e) {
-      setErro(e?.response?.data?.error ?? e?.message ?? 'Erro ao executar simulação.')
+      const semResposta = !e?.response
+      const msg = e?.response?.data?.error
+        ?? (semResposta
+            ? 'Não foi possível contatar o servidor (o motor pode estar reiniciando). Aguarde alguns segundos e tente novamente.'
+            : (e?.message ?? 'Erro ao executar simulação.'))
+      setErro(msg)
     } finally {
       setLoading(false)
     }

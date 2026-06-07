@@ -3,5 +3,9 @@ main = "worker.py"
 compatibility_date = "2024-12-18"
 compatibility_flags = ["python_workers"]
 
+# Keep-warm: mantém o isolate aquecido para reduzir cold start do Python Worker.
+[triggers]
+crons = ["*/3 * * * *"]
+
 [observability]
 enabled = true
