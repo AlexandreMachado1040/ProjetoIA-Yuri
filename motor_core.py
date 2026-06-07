@@ -772,6 +772,9 @@ def simulate_fast(params: dict) -> dict:
         'hist_power_bins':  [round(i * pwr_bin_kw, 2) for i in range(N_PWR_BINS + 2)],
         'hist_power_arr':   [round(v / 1000, 3) for v in hist_pwr_arr_acc],
         'hist_power_grid':  [round(v / 1000, 3) for v in hist_pwr_grid_acc],
+        'P_nom_DC_kW':      round(P_nom_DC, 2),
+        'R_DC_AC':          round(P_nom_stc / P_nom_AC, 3) if P_nom_AC > 0 else 0,
+        'eta_inv_max_pct':  round(eta_max, 2),
         'modulo_elec': {
             'Voc':     mod.get('Voc',     0.0),
             'Isc':     mod.get('Isc',     0.0),

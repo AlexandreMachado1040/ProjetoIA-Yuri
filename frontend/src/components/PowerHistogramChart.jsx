@@ -1,55 +1,184 @@
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, ReferenceLine, Label,
+  ComposedChart, Bar, Cell, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, ReferenceLine,
+  ReferenceArea, Label,
 } from 'recharts'
 
+// Critério PVSyst: 0–0.2% ótimo, 0.2–3% aceitável, >3% subdimensionado
+function clipColor(pct) {
+  const v = parseFloat(pct)
+  if (v <= 0.2) return '#10b981'
+  if (v <= 3.0) return '#f59e0b'
+  return '#ef4444'
+}
+
+function clipLabel(pct) {
+  const v = parseFloat(pct)
+  if (v <= 0.2) return 'ótimo'
+  if (v <= 3.0) return 'aceitável'
+  return 'inversor subdimensionado'
+}
+
+function CustomTooltip({ active, payload, label, P_nom_DC }) {
+  if (!active || !payload?.length) return null
+  const grid    = payload.find(p => p.dataKey === 'grid')?.value ?? 0
+  const loss    = payload.find(p => p.dataKey === 'loss')?.value ?? 0
+  const arr     = grid + loss
+  const pct     = arr > 0 ? ((loss / arr) * 100).toFixed(1) : '0.0'
+  const clipped = label > P_nom_DC
+  return (
+    <div style={{
+      background: '#0d1530', border: '1px solid rgba(0,95,255,0.3)',
+      borderRadius: 6, padding: '8px 12px', fontSize: 12,
+    }}>
+      <p style={{ color: '#94a3b8', marginBottom: 4 }}>
+        P_DC: {label} kW {clipped ? <span style={{ color: '#ef4444' }}>⚠ clipping</span> : ''}
+      </p>
+      <p style={{ color: '#00C8FF' }}>E_Grid: {grid.toFixed(0)} kWh</p>
+      <p style={{ color: clipped ? '#ef4444' : '#f97316' }}>
+        Perda {clipped ? 'clipping+inv.' : 'inversor'}: {loss.toFixed(0)} kWh ({pct}%)
+      </p>
+      <p style={{ color: '#e2e8f0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 4, paddingTop: 4 }}>
+        E_Array: {arr.toFixed(0)} kWh
+      </p>
+    </div>
+  )
+}
+
 export default function PowerHistogramChart({ resultado }) {
-  const { hist_power_bins, hist_power_arr, hist_power_grid, P_nom_stc_kWp, P_nom_AC_kW } = resultado ?? {}
+  const {
+    hist_power_bins, hist_power_arr, hist_power_grid,
+    P_nom_stc_kWp, P_nom_AC_kW, P_nom_DC_kW, R_DC_AC, eta_inv_max_pct,
+  } = resultado ?? {}
   if (!hist_power_bins || hist_power_bins.length === 0) return null
 
+  // Dados em kWh (converter de MWh)
   const data = hist_power_bins
     .slice(0, hist_power_bins.length - 1)
-    .map((b, i) => ({
-      kW:   +b.toFixed(1),
-      arr:  +(hist_power_arr?.[i]  ?? 0),
-      grid: +(hist_power_grid?.[i] ?? 0),
-    }))
-    .filter(d => d.arr > 0)
+    .map((b, i) => {
+      const arr  = +((hist_power_arr?.[i]  ?? 0) * 1000)
+      const grid = +((hist_power_grid?.[i] ?? 0) * 1000)
+      const loss = +(arr - grid).toFixed(1)
+      return { kW: +b.toFixed(1), grid: +grid.toFixed(1), loss }
+    })
+    .filter(d => (d.grid + d.loss) > 0)
 
-  const totalMWh   = hist_power_arr?.reduce((s, v) => s + v, 0) ?? 1
-  const clippedMWh = hist_power_arr?.[hist_power_arr.length - 1] ?? 0
-  const clipPct    = totalMWh > 0 ? ((clippedMWh / totalMWh) * 100).toFixed(1) : '0.0'
+  // Perdas totais
+  const totalArr  = hist_power_arr?.reduce((s, v) => s + v, 0) ?? 1
+  const totalLoss = hist_power_arr && hist_power_grid
+    ? hist_power_arr.reduce((s, v, i) => s + v - (hist_power_grid[i] ?? 0), 0)
+    : 0
+  const clipPct = totalArr > 0 ? ((totalLoss / totalArr) * 100).toFixed(1) : '0.0'
+
+  // Pnom DC: limiar real de clipping (= Pnom AC / η_max)
+  const P_dc = P_nom_DC_kW ?? (P_nom_AC_kW ? +(P_nom_AC_kW / ((eta_inv_max_pct ?? 99) / 100)).toFixed(1) : null)
+  const rDC  = R_DC_AC ?? (P_nom_AC_kW && P_nom_stc_kWp ? +(P_nom_stc_kWp / P_nom_AC_kW).toFixed(2) : null)
+
+  const maxKW = data.length ? data[data.length - 1].kW : (P_nom_stc_kWp ?? 100)
+  const xMax  = Math.ceil(maxKW * 1.08 / 10) * 10
+
+  const color = clipColor(clipPct)
+  const label = clipLabel(clipPct)
 
   return (
     <div className="chart-card">
       <h3>Distribuição de Saída do Inversor</h3>
+
+      {/* Subtitle estilo PVSyst */}
       <p className="chart-sub">
-        Energia por faixa de potência DC &nbsp;|&nbsp;
-        Pnom STC: {P_nom_stc_kWp} kWp &nbsp;|&nbsp;
-        Pnom AC: {P_nom_AC_kW} kW &nbsp;|&nbsp;
-        Perdas clipping: {clipPct}%
+        Pnom STC: <strong>{P_nom_stc_kWp} kWp</strong>
+        &nbsp;·&nbsp;
+        Pnom AC: <strong>{P_nom_AC_kW} kW</strong>
+        {P_dc && <> &nbsp;·&nbsp; Pnom DC: <strong>{P_dc} kW</strong></>}
+        {rDC  && <> &nbsp;·&nbsp; R DC/AC: <strong>{rDC}</strong></>}
+        &nbsp;·&nbsp;
+        Perda overload:&nbsp;
+        <strong style={{ color }}>{clipPct}%</strong>
+        &nbsp;
+        <span style={{
+          background: `${color}18`, border: `1px solid ${color}50`,
+          borderRadius: 4, padding: '1px 6px', fontSize: '0.7rem', color,
+        }}>
+          {label}
+        </span>
       </p>
-      <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 30 }}>
+
+      <ResponsiveContainer width="100%" height={300}>
+        <ComposedChart data={data} margin={{ top: 20, right: 24, left: 10, bottom: 32 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-          <XAxis dataKey="kW" tick={{ fontSize: 11 }}>
-            <Label value="Potência DC do array [kW]" position="insideBottom" offset={-18} fill="#94a3b8" fontSize={12} />
+
+          <XAxis
+            dataKey="kW" type="number"
+            domain={[0, xMax]} tickCount={10}
+            tick={{ fontSize: 11 }}
+            tickFormatter={v => v === 0 ? '0' : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : Math.round(v).toString()}
+          >
+            <Label value="Potência DC [kW]" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
           </XAxis>
-          <YAxis unit=" MWh" tick={{ fontSize: 11 }} />
-          <Tooltip formatter={(v, n) => [`${v.toFixed(2)} MWh`, n === 'arr' ? 'E_Array (MPP)' : 'E_Grid (AC)']} />
+
+          <YAxis
+            tick={{ fontSize: 11 }}
+            tickFormatter={v => v === 0 ? '0' : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : Math.round(v).toString()}
+            label={{ value: 'kWh', angle: -90, position: 'insideLeft', offset: 10, fill: '#94a3b8', fontSize: 11 }}
+          />
+
+          <Tooltip content={<CustomTooltip P_nom_DC={P_dc} />} />
           <Legend verticalAlign="top" />
+
+          {/* Zona de clipping — acima do Pnom DC */}
+          {P_dc && (
+            <ReferenceArea
+              x1={P_dc} x2={xMax}
+              fill="rgba(239,68,68,0.07)"
+              stroke="none"
+            />
+          )}
+
+          {/* Pnom DC — limiar real de clipping */}
+          {P_dc && (
+            <ReferenceLine x={P_dc} stroke="#ef4444" strokeWidth={1.5} strokeDasharray="4 2"
+              label={{ value: `Pnom DC ${P_dc} kW`, position: 'insideTopLeft', fontSize: 9, fill: '#ef4444' }} />
+          )}
+
+          {/* Pnom AC */}
           {P_nom_AC_kW && (
-            <ReferenceLine x={P_nom_AC_kW} stroke="#f59e0b" strokeDasharray="5 3"
-              label={{ value: 'Pnom AC', position: 'top', fontSize: 10, fill: '#f59e0b' }} />
+            <ReferenceLine x={P_nom_AC_kW} stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 3"
+              label={{ value: `Pnom AC ${P_nom_AC_kW} kW`, position: 'top', fontSize: 10, fill: '#f59e0b' }} />
           )}
+
+          {/* Pnom STC — potência projetada total do arranjo */}
           {P_nom_stc_kWp && (
-            <ReferenceLine x={P_nom_stc_kWp} stroke="#10b981" strokeDasharray="5 3"
-              label={{ value: 'Pnom STC', position: 'top', fontSize: 10, fill: '#10b981' }} />
+            <ReferenceLine x={P_nom_stc_kWp} stroke="#10b981" strokeWidth={2}
+              label={{ value: `Pnom STC ${P_nom_stc_kWp} kWp`, position: 'top', fontSize: 10, fill: '#10b981' }} />
           )}
-          <Bar dataKey="arr"  name="E_Array (MPP)" fill="#0077EE" radius={[2,2,0,0]} />
-          <Bar dataKey="grid" name="E_Grid (AC)"   fill="#00C8FF" radius={[2,2,0,0]} />
-        </BarChart>
+
+          {/* E_Grid — base da barra */}
+          <Bar dataKey="grid" name="E_Grid (AC)" stackId="a" radius={[0,0,2,2]}>
+            {data.map((d, i) => (
+              <Cell key={i} fill="#00C8FF" />
+            ))}
+          </Bar>
+
+          {/* Perda — topo da barra: laranja (eficiência) ou vermelho (clipping) */}
+          <Bar dataKey="loss" name="Perda inversor" stackId="a" radius={[3,3,0,0]} opacity={0.85}>
+            {data.map((d, i) => (
+              <Cell key={i} fill={P_dc && d.kW > P_dc ? '#ef4444' : '#f97316'} />
+            ))}
+          </Bar>
+        </ComposedChart>
       </ResponsiveContainer>
+
+      {/* Legenda de cores da perda */}
+      <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: '0.72rem', color: 'var(--text-sub)', flexWrap: 'wrap' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 12, height: 12, borderRadius: 2, background: '#f97316', display: 'inline-block' }} />
+          Perda de eficiência (P_DC ≤ Pnom DC)
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 12, height: 12, borderRadius: 2, background: '#ef4444', display: 'inline-block' }} />
+          Perda de clipping (P_DC &gt; Pnom DC)
+        </span>
+      </div>
     </div>
   )
 }

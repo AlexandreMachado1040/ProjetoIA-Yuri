@@ -1,15 +1,41 @@
 import { useState, useEffect } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, Label,
+  ResponsiveContainer, ReferenceLine, Label, Legend,
 } from 'recharts'
 
 const WORKER_URL = 'https://aurova-motor.alexandreclm.workers.dev'
 
-export default function FTCurveChart({ inputParams }) {
+// Ponto ótimo destacado numa curva específica
+function makeDot(optimalX, keyX, keyY, fill) {
+  return function OptimalDot(props) {
+    const { cx, cy, payload } = props
+    if (payload[keyX] !== optimalX) return null
+    return (
+      <g key={`opt-${cx}-${cy}`}>
+        <circle cx={cx} cy={cy} r={8} fill={fill} stroke="#0a0f20" strokeWidth={1.5} />
+        <circle cx={cx} cy={cy} r={3.5} fill="#fff" />
+      </g>
+    )
+  }
+}
+
+function yDomain(data, keys) {
+  const vals = data.flatMap(d => keys.map(k => d[k]).filter(v => v != null))
+  const min  = Math.min(...vals)
+  const max  = Math.max(...vals)
+  const pad  = (max - min) * 0.1 || 0.005
+  return [+(min - pad).toFixed(4), +(max + pad).toFixed(4)]
+}
+
+export default function FTCurveChart({ inputParams, resultado }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
+
+  const { FT_frontal, FT_bifacial, ganho_bif_pct } = resultado ?? {}
+  const isBifacial   = ganho_bif_pct > 0 && FT_bifacial && FT_bifacial !== FT_frontal
+  const ganhoFactor  = isBifacial ? (1 + ganho_bif_pct / 100) : 1
 
   const key = inputParams
     ? `${inputParams.lat}_${inputParams.lon}_${inputParams.tz}_${inputParams.tilt}_${inputParams.az}`
@@ -34,57 +60,160 @@ export default function FTCurveChart({ inputParams }) {
   )
   if (error || !data) return null
 
-  const tiltData = data.tilt_curve.map(([t, ft]) => ({ tilt: t, FT: ft }))
-  const azData   = data.az_curve.map(([a, ft])   => ({ az: a,   FT: ft }))
+  // Monta dados com curva frontal + curva bifacial estimada
+  const tiltData = data.tilt_curve.map(([t, ft]) => ({
+    tilt:    t,
+    frontal: ft,
+    bifacial: isBifacial ? +(ft * ganhoFactor).toFixed(4) : undefined,
+  }))
 
-  const diffTilt = ((data.FT_optimal_tilt - data.FT_current) / data.FT_current * 100).toFixed(1)
-  const diffAz   = ((data.FT_optimal_az   - data.FT_current) / data.FT_current * 100).toFixed(1)
+  const azData = data.az_curve.map(([a, ft]) => ({
+    az:      a,
+    frontal: ft,
+    bifacial: isBifacial ? +(ft * ganhoFactor).toFixed(4) : undefined,
+  }))
+
+  const FT_bif_opt_tilt = isBifacial
+    ? +(data.FT_optimal_tilt * ganhoFactor).toFixed(4) : null
+  const FT_bif_opt_az = isBifacial
+    ? +(data.FT_optimal_az   * ganhoFactor).toFixed(4) : null
+
+  const tiltOptDiff = data.optimal_tilt !== data.current_tilt
+  const azOptDiff   = data.optimal_az   !== data.current_az
+
+  const domainTilt = yDomain(tiltData, isBifacial ? ['frontal','bifacial'] : ['frontal'])
+  const domainAz   = yDomain(azData,   isBifacial ? ['frontal','bifacial'] : ['frontal'])
+
+  const dotFrontTilt = makeDot(data.optimal_tilt, 'tilt', 'frontal', '#00C8FF')
+  const dotBifTilt   = makeDot(data.optimal_tilt, 'tilt', 'bifacial', '#10b981')
+  const dotFrontAz   = makeDot(data.optimal_az,   'az',   'frontal', '#005FFF')
+  const dotBifAz     = makeDot(data.optimal_az,   'az',   'bifacial', '#10b981')
+
+  const tooltipStyle = {
+    background: '#0d1530',
+    border: '1px solid rgba(0,95,255,0.3)',
+    fontSize: 12, borderRadius: 6,
+  }
+
+  const formatTooltip = (v, name) => [v?.toFixed(4) ?? '—', name]
 
   return (
     <div className="chart-card">
       <h3>Otimização de Orientação — Fator de Transposição</h3>
       <p className="chart-sub">
-        FT atual: <strong>{data.FT_current}</strong> &nbsp;|&nbsp;
-        Ótimo por inclinação: <strong>{data.FT_optimal_tilt}</strong> @ {data.optimal_tilt}° (+{diffTilt}%) &nbsp;|&nbsp;
-        Ótimo por azimute: <strong>{data.FT_optimal_az}</strong> @ {data.optimal_az}° (+{diffAz}%)
+        FT frontal atual: <strong>{data.FT_current}</strong>
+        {isBifacial && (
+          <> &nbsp;·&nbsp;
+            FT bifacial atual: <strong style={{ color: '#10b981' }}>{FT_bifacial}</strong>
+            &nbsp;(+{ganho_bif_pct}% rear)
+          </>
+        )}
+        &nbsp;|&nbsp;
+        Ótimo @ {data.optimal_tilt}° incl.:&nbsp;
+        frontal <strong style={{ color: '#00C8FF' }}>{data.FT_optimal_tilt}</strong>
+        {isBifacial && <> · bifacial <strong style={{ color: '#10b981' }}>{FT_bif_opt_tilt}</strong></>}
+        &nbsp;|&nbsp;
+        Ótimo @ {data.optimal_az}° az.:&nbsp;
+        frontal <strong style={{ color: '#005FFF' }}>{data.FT_optimal_az}</strong>
+        {isBifacial && <> · bifacial <strong style={{ color: '#10b981' }}>{FT_bif_opt_az}</strong></>}
       </p>
+
+      {isBifacial && (
+        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+          Curva bifacial estimada: FT_front(θ) × (1 + {ganho_bif_pct}%) — ganho constante por orientação
+        </p>
+      )}
+
       <div className="ft-grid">
+
+        {/* ── FT × Inclinação ── */}
         <div>
           <p style={{ textAlign:'center', fontSize:'0.8rem', color:'var(--text-sub)', marginBottom:'0.25rem' }}>
             FT × Inclinação &nbsp;(azimute fixo: {data.current_az}°)
           </p>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={tiltData} margin={{ top: 8, right: 20, left: 0, bottom: 28 }}>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={tiltData} margin={{ top: 16, right: 20, left: 0, bottom: 28 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
               <XAxis dataKey="tilt" tick={{ fontSize: 10 }}>
                 <Label value="Inclinação [°]" position="insideBottom" offset={-16} fill="#94a3b8" fontSize={11} />
               </XAxis>
-              <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} />
-              <Tooltip formatter={v => [v.toFixed(4), 'FT']} labelFormatter={v => `Tilt: ${v}°`} />
-              <Line type="monotone" dataKey="FT" stroke="#00C8FF" strokeWidth={2} dot={false} />
+              <YAxis domain={domainTilt} tick={{ fontSize: 10 }} tickFormatter={v => v.toFixed(3)} />
+              <Tooltip formatter={formatTooltip} labelFormatter={v => `Tilt: ${v}°`} contentStyle={tooltipStyle} />
+              <Legend verticalAlign="top" wrapperStyle={{ fontSize: '0.75rem' }} />
+
+              {/* Linha atual */}
               <ReferenceLine x={data.current_tilt} stroke="#f59e0b" strokeDasharray="5 3"
-                label={{ value: `atual ${data.current_tilt}°`, position: 'top', fontSize: 9, fill: '#f59e0b' }} />
+                label={{ value: `atual ${data.current_tilt}°`, position: 'insideTopLeft', fontSize: 9, fill: '#f59e0b' }} />
+
+              {/* Linha ótima */}
+              {tiltOptDiff && (
+                <ReferenceLine x={data.optimal_tilt} stroke="#10b981" strokeDasharray="4 2"
+                  label={{ value: `ótimo ${data.optimal_tilt}°`, position: 'insideTopRight', fontSize: 9, fill: '#10b981' }} />
+              )}
+
+              {/* Curva frontal */}
+              <Line
+                type="monotone" dataKey="frontal" name="FT Frontal"
+                stroke="#00C8FF" strokeWidth={2}
+                dot={dotFrontTilt} activeDot={{ r: 4 }}
+              />
+
+              {/* Curva bifacial */}
+              {isBifacial && (
+                <Line
+                  type="monotone" dataKey="bifacial" name="FT Bifacial"
+                  stroke="#10b981" strokeWidth={2} strokeDasharray="6 3"
+                  dot={dotBifTilt} activeDot={{ r: 4 }}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
+
+        {/* ── FT × Azimute ── */}
         <div>
           <p style={{ textAlign:'center', fontSize:'0.8rem', color:'var(--text-sub)', marginBottom:'0.25rem' }}>
             FT × Azimute &nbsp;(inclinação fixa: {data.current_tilt}°)
           </p>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={azData} margin={{ top: 8, right: 20, left: 0, bottom: 28 }}>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={azData} margin={{ top: 16, right: 20, left: 0, bottom: 28 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
               <XAxis dataKey="az" tick={{ fontSize: 10 }}>
                 <Label value="Azimute [°]" position="insideBottom" offset={-16} fill="#94a3b8" fontSize={11} />
               </XAxis>
-              <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} />
-              <Tooltip formatter={v => [v.toFixed(4), 'FT']} labelFormatter={v => `Az: ${v}°`} />
-              <Line type="monotone" dataKey="FT" stroke="#005FFF" strokeWidth={2} dot={false} />
+              <YAxis domain={domainAz} tick={{ fontSize: 10 }} tickFormatter={v => v.toFixed(3)} />
+              <Tooltip formatter={formatTooltip} labelFormatter={v => `Az: ${v}°`} contentStyle={tooltipStyle} />
+              <Legend verticalAlign="top" wrapperStyle={{ fontSize: '0.75rem' }} />
+
+              {/* Linha atual */}
               <ReferenceLine x={data.current_az} stroke="#f59e0b" strokeDasharray="5 3"
-                label={{ value: `atual ${data.current_az}°`, position: 'top', fontSize: 9, fill: '#f59e0b' }} />
+                label={{ value: `atual ${data.current_az}°`, position: 'insideTopLeft', fontSize: 9, fill: '#f59e0b' }} />
+
+              {/* Linha ótima */}
+              {azOptDiff && (
+                <ReferenceLine x={data.optimal_az} stroke="#10b981" strokeDasharray="4 2"
+                  label={{ value: `ótimo ${data.optimal_az}°`, position: 'insideTopRight', fontSize: 9, fill: '#10b981' }} />
+              )}
+
+              {/* Curva frontal */}
+              <Line
+                type="monotone" dataKey="frontal" name="FT Frontal"
+                stroke="#005FFF" strokeWidth={2}
+                dot={dotFrontAz} activeDot={{ r: 4 }}
+              />
+
+              {/* Curva bifacial */}
+              {isBifacial && (
+                <Line
+                  type="monotone" dataKey="bifacial" name="FT Bifacial"
+                  stroke="#10b981" strokeWidth={2} strokeDasharray="6 3"
+                  dot={dotBifAz} activeDot={{ r: 4 }}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
+
       </div>
     </div>
   )

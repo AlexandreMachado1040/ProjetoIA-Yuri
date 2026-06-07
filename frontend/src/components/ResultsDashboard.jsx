@@ -70,7 +70,7 @@ export default function ResultsDashboard({ resultado }) {
         histGrid={hist_grid}
       />
 
-      <FTCurveChart inputParams={input_params} />
+      <FTCurveChart inputParams={input_params} resultado={resultado} />
     </div>
   )
 }
@@ -83,3 +83,4 @@ function KPI({ label, value, unit, color = 'blue' }) {
     </div>
   )
 }
+

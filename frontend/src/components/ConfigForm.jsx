@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getModulos, getInversores } from '../api/client'
 
 const DEFAULTS = {
@@ -18,20 +18,35 @@ const DEFAULTS = {
 }
 
 export default function ConfigForm({ onSubmit, loading }) {
-  const [modulos, setModulos]     = useState([])
+  const [modulos,    setModulos]    = useState([])
   const [inversores, setInversores] = useState([])
-  const [form, setForm]           = useState(DEFAULTS)
+  const [form,       setForm]       = useState(DEFAULTS)
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogError,   setCatalogError]   = useState(false)
 
-  useEffect(() => {
-    getModulos().then(data => {
-      setModulos(data)
-      if (data.length) setForm(f => ({ ...f, modulo: data[0].nome }))
-    })
-    getInversores().then(data => {
-      setInversores(data)
-      if (data.length) setForm(f => ({ ...f, inversor: data[0].nome }))
-    })
+  const loadCatalog = useCallback(() => {
+    setCatalogLoading(true)
+    setCatalogError(false)
+
+    // Promise.all garante uma única chamada ao /catalogo
+    Promise.all([getModulos(), getInversores()])
+      .then(([mods, invs]) => {
+        setModulos(mods)
+        setInversores(invs)
+        if (mods.length) setForm(f => ({ ...f, modulo:   f.modulo   || mods[0].nome }))
+        if (invs.length) setForm(f => ({ ...f, inversor: f.inversor || invs[0].nome }))
+        setCatalogLoading(false)
+      })
+      .catch(() => {
+        setCatalogLoading(false)
+        setCatalogError(true)
+      })
   }, [])
+
+  // Carrega catálogo + retry automático único se falhar (Worker cold start)
+  useEffect(() => {
+    loadCatalog()
+  }, [loadCatalog])
 
   const set = (k) => (e) => {
     const v = e.target.type === 'number' ? Number(e.target.value) : e.target.value
@@ -79,9 +94,40 @@ export default function ConfigForm({ onSubmit, loading }) {
 
       <section>
         <h3>Equipamentos</h3>
+
+        {catalogError && (
+          <div style={{
+            background: 'rgba(239,68,68,0.10)',
+            border: '1px solid rgba(239,68,68,0.30)',
+            borderRadius: 7, padding: '8px 10px',
+            fontSize: '0.78rem', color: '#fca5a5',
+            marginBottom: 10, display: 'flex',
+            alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          }}>
+            <span>Falha ao carregar catálogo.</span>
+            <button
+              type="button"
+              onClick={loadCatalog}
+              style={{
+                background: 'rgba(239,68,68,0.20)', border: '1px solid rgba(239,68,68,0.40)',
+                borderRadius: 5, padding: '3px 10px', color: '#fca5a5',
+                fontSize: '0.76rem', cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              Tentar novamente
+            </button>
+          </div>
+        )}
+
         <label className="field">
-          <span>Módulo</span>
-          <select value={form.modulo} onChange={set('modulo')}>
+          <span>Módulo{catalogLoading ? ' (carregando…)' : ''}</span>
+          <select
+            value={form.modulo}
+            onChange={set('modulo')}
+            disabled={catalogLoading || catalogError}
+          >
+            {catalogLoading && <option>Carregando…</option>}
+            {catalogError   && <option>Erro ao carregar</option>}
             {modulos.map(m => (
               <option key={m.nome} value={m.nome}>
                 {m.nome} ({m.Pmpp_Wp} Wp)
@@ -89,9 +135,16 @@ export default function ConfigForm({ onSubmit, loading }) {
             ))}
           </select>
         </label>
+
         <label className="field">
-          <span>Inversor</span>
-          <select value={form.inversor} onChange={set('inversor')}>
+          <span>Inversor{catalogLoading ? ' (carregando…)' : ''}</span>
+          <select
+            value={form.inversor}
+            onChange={set('inversor')}
+            disabled={catalogLoading || catalogError}
+          >
+            {catalogLoading && <option>Carregando…</option>}
+            {catalogError   && <option>Erro ao carregar</option>}
             {inversores.map(i => (
               <option key={i.nome} value={i.nome}>
                 {i.nome} ({i.P_nomAC_kW} kW)
@@ -132,7 +185,11 @@ export default function ConfigForm({ onSubmit, loading }) {
         </section>
       )}
 
-      <button type="submit" disabled={loading} className="btn-simular">
+      <button
+        type="submit"
+        disabled={loading || catalogLoading || catalogError || !form.modulo}
+        className="btn-simular"
+      >
         {loading ? 'Simulando…' : 'Simular'}
       </button>
     </form>
