@@ -29,8 +29,8 @@ export default function HistogramaChart({ bins, histArr, histGrid }) {
           <YAxis unit=" kWh" />
           <Tooltip formatter={v => [`${v.toFixed(0)} kWh`]} />
           <Legend verticalAlign="top" />
-          <Bar dataKey="arr"  name="E_Array (P_arr)"  fill="#43A047" radius={[2,2,0,0]} />
-          <Bar dataKey="grid" name="E_Grid (rede)"    fill="#7B1FA2" radius={[2,2,0,0]} />
+          <Bar dataKey="arr"  name="E_Array (P_arr)"  fill="#0077EE" radius={[2,2,0,0]} />
+          <Bar dataKey="grid" name="E_Grid (rede)"    fill="#00C8FF" radius={[2,2,0,0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

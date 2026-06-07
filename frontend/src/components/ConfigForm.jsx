@@ -8,7 +8,7 @@ const DEFAULTS = {
   N_s:        28,
   N_strings:  3,
   tilt:       20.8,
-  az:         180.0,
+  az:         0.0,
   bifacial:   true,
   pitch:      2.826,
   mod_height: 2.0,
@@ -52,8 +52,8 @@ export default function ConfigForm({ onSubmit, loading }) {
       albedo:     form.albedo,
       pitch:      form.pitch,
       mod_height: form.mod_height,
-      N_seg:      0,
-      N_rays:     0,
+      N_seg:      form.bifacial ? 5 : 0,
+      N_rays:     form.bifacial ? 12 : 0,
       modulo:     form.modulo,
       inversor:   form.inversor,
     })
@@ -110,7 +110,7 @@ export default function ConfigForm({ onSubmit, loading }) {
       <section>
         <h3>Geometria</h3>
         {field('Inclinação (°)', 'tilt')}
-        {field('Azimute (° | 180=Norte HS)', 'az')}
+        {field('Azimute (° | 0=Norte no HS)', 'az')}
         <label className="field">
           <span>Modo</span>
           <select

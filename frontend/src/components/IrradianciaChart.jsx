@@ -25,12 +25,12 @@ export default function IrradianciaChart({ monthlyGHI, monthlyGf, monthlyGb, bif
           <YAxis unit=" kWh" />
           <Tooltip formatter={v => [`${v} kWh/m²`]} />
           <Legend />
-          <Bar dataKey="GHI"  name="GHI (horizontal)"     fill="#90CAF9" radius={[2,2,0,0]} />
+          <Bar dataKey="GHI"  name="GHI (horizontal)"     fill="#00AAFF" radius={[2,2,0,0]} />
           {monthlyGf && (
-            <Bar dataKey="Gf" name="G frontal (inclinado)" fill="#1976D2" radius={[2,2,0,0]} />
+            <Bar dataKey="Gf" name="G frontal (inclinado)" fill="#005FFF" radius={[2,2,0,0]} />
           )}
           {bifacial && monthlyGb && (
-            <Bar dataKey="Gb" name="G bifacial"            fill="#2E7D32" radius={[2,2,0,0]} />
+            <Bar dataKey="Gb" name="G bifacial"            fill="#10b981" radius={[2,2,0,0]} />
           )}
         </BarChart>
       </ResponsiveContainer>

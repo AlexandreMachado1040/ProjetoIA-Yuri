@@ -28,15 +28,15 @@ export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh }) {
           <YAxis unit=" MWh" />
           <Tooltip formatter={v => [`${v} MWh`]} />
           <Legend />
-          <ReferenceLine y={+media.toFixed(2)} stroke="#f57c00" strokeDasharray="5 3"
+          <ReferenceLine y={+media.toFixed(2)} stroke="#f59e0b" strokeDasharray="5 3"
                          label={{ value: `Média ${media.toFixed(2)} MWh`, position: 'right',
-                                  fontSize: 11, fill: '#f57c00' }} />
+                                  fontSize: 11, fill: '#f59e0b' }} />
           {arrMwh && (
-            <Bar dataKey="arr" name="E_Array (DC)" fill="#A5D6A7" radius={[3,3,0,0]} />
+            <Bar dataKey="arr" name="E_Array (DC)" fill="#0077EE" radius={[3,3,0,0]} />
           )}
           <Bar dataKey="grid" name="E_Grid (rede AC)" radius={[3,3,0,0]}>
             {data.map((d, i) => (
-              <Cell key={i} fill={d.grid >= media ? '#1565C0' : '#64B5F6'} />
+              <Cell key={i} fill={d.grid >= media ? '#00C8FF' : '#005FFF'} />
             ))}
           </Bar>
         </ComposedChart>

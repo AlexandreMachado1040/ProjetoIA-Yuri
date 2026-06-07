@@ -2,8 +2,9 @@
 
 body {
   margin: 0;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  background: #f0f4f8;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  background: #05091A;
+  color: #e2e8f0;
 }
 
 #root {

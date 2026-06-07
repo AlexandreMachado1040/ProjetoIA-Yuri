@@ -1,4 +1,4 @@
-name = "motor-pvsyst"
+name = "aurova-motor"
 main = "worker.py"
 compatibility_date = "2024-12-18"
 compatibility_flags = ["python_workers"]

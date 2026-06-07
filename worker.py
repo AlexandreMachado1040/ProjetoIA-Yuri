@@ -7,7 +7,7 @@ GET  /catalogo → lista de módulos e inversores disponíveis
 
 from js import Response, Headers, URL, fetch as js_fetch
 import json
-from motor_core import simulate_fast, CATALOGO_MODULOS, CATALOGO_INVERSORES
+from motor_core import simulate_fast, calc_ft_curve, build_nasa_data, CATALOGO_MODULOS, CATALOGO_INVERSORES
 
 _CORS = {
     "Access-Control-Allow-Origin":  "*",
@@ -17,11 +17,11 @@ _CORS = {
 
 _DEFAULTS = dict(
     lat=-23.55, lon=-46.63, tz=-3,
-    tilt=20.8, az=180.0,
+    tilt=20.8, az=0.0,
     N_s=28, N_strings=3,
     bifacial=True,
     albedo=0.30, pitch=2.826, mod_height=2.0,
-    N_seg=0, N_rays=0,
+    N_seg=5, N_rays=12,
     modulo="CS7N-730TB-AG",
     inversor="CSI-250K-T8001A-E",
 )
@@ -146,11 +146,12 @@ async def on_fetch(request, env):
             lon = float(p["lon"])
 
             # Busca NASA POWER via js.fetch (async, nativo do Workers)
+            _nasa_err = None
             try:
                 nasa_data = await _fetch_nasa(lat, lon)
             except Exception as e:
                 nasa_data = None
-                params['_nasa_err'] = f"{type(e).__name__}: {e}"
+                _nasa_err = f"{type(e).__name__}: {e}"
 
             params = {
                 "lat":        lat,
@@ -164,19 +165,39 @@ async def on_fetch(request, env):
                 "albedo":     float(p["albedo"]),
                 "pitch":      float(p["pitch"]),
                 "mod_height": float(p["mod_height"]),
-                "N_seg":      min(int(p.get("N_seg", 0)),  15),
-                "N_rays":     min(int(p.get("N_rays", 0)), 90),
+                "N_seg":      min(int(p.get("N_seg", 5)),  15),
+                "N_rays":     min(int(p.get("N_rays", 12)), 90),
                 "modulo":     mod,
                 "inversor":   inv,
                 "nasa_data":  nasa_data,   # None → simulate_fast usa fallback SP
             }
 
             result = simulate_fast(params)
-            if '_nasa_err' in params:
-                result['nasa_debug'] = params['_nasa_err']
+            if _nasa_err:
+                result['nasa_debug'] = _nasa_err
         except Exception as exc:
             return _error(f"Erro na simulação: {type(exc).__name__}: {exc}", status=500)
 
         return _json_response(result)
+
+    # GET /ft-curve
+    if method == "GET" and path == "/ft-curve":
+        try:
+            from urllib.parse import parse_qs, urlparse as _urlparse
+            qs  = parse_qs(_urlparse(request.url).query)
+            def _qp(k, d): return float(qs.get(k, [str(d)])[0])
+            lat  = _qp('lat',  -23.55)
+            lon  = _qp('lon',  -46.63)
+            tz   = _qp('tz',   -3)
+            tilt = _qp('tilt', 20.8)
+            az   = _qp('az',   0.0)
+            try:
+                nasa_data = await _fetch_nasa(lat, lon)
+            except Exception:
+                nasa_data = build_nasa_data(lat, lon)
+            result = calc_ft_curve(lat, lon, tz, tilt, az, nasa_data)
+            return _json_response(result)
+        except Exception as exc:
+            return _error(f"Erro ft-curve: {type(exc).__name__}: {exc}", status=500)
 
     return _error("Endpoint não encontrado", status=404)

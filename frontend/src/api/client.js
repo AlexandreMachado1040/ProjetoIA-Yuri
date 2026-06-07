@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const WORKER_URL = 'https://motor-pvsyst.alexandreclm.workers.dev'
+const WORKER_URL = 'https://aurova-motor.alexandreclm.workers.dev'
 
 const api = axios.create({
   baseURL: WORKER_URL,

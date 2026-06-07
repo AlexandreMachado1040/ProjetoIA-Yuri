@@ -289,8 +289,9 @@ def calc_ft_frontal(HSun: float, AzSun: float,
               + math.sin(h) * math.cos(t))
     Rb      = max(cos_ia / math.sin(h), 0.0)
     fAni    = min(DNI / ENI, 1.0) if ENI > 0 else 0.0
+    Ib_H    = max(GHI - DHI, 0.0)   # irradiância direta na horizontal (Hay 1979)
     Gt      = max(
-        DNI * Rb
+        Ib_H * Rb
         + DHI * (fAni * Rb + (1 - fAni) * (1 + math.cos(t)) / 2)
         + GHI * albedo * (1 - math.cos(t)) / 2,
         0.0,
@@ -603,6 +604,11 @@ def simulate_fast(params: dict) -> dict:
     hist_arr_acc   = [0.0] * N_BINS
     hist_grid_acc  = [0.0] * N_BINS
 
+    N_PWR_BINS        = 20
+    pwr_bin_kw        = P_nom_stc / N_PWR_BINS if P_nom_stc > 0 else 1.0
+    hist_pwr_arr_acc  = [0.0] * (N_PWR_BINS + 1)
+    hist_pwr_grid_acc = [0.0] * (N_PWR_BINS + 1)
+
     for m in range(1, 13):
         mi  = m - 1
         # Dia representativo: ~meio do mês
@@ -623,6 +629,8 @@ def simulate_fast(params: dict) -> dict:
         day_Gb        = 0.0
         day_hist_arr  = [0.0] * N_BINS
         day_hist_grid = [0.0] * N_BINS
+        day_hist_pwr_arr  = [0.0] * (N_PWR_BINS + 1)
+        day_hist_pwr_grid = [0.0] * (N_PWR_BINS + 1)
 
         for hour in range(24):
             GHI, DNI, DHI, HSun, AzSun, ENI = calc_ghi_hourly(
@@ -680,6 +688,10 @@ def simulate_fast(params: dict) -> dict:
             day_hist_arr[b]  += P_mpp
             day_hist_grid[b] += E_grid_h
 
+            pb = min(int(P_mpp / pwr_bin_kw), N_PWR_BINS) if P_mpp > 0 and pwr_bin_kw > 0 else 0
+            day_hist_pwr_arr[pb]  += P_mpp
+            day_hist_pwr_grid[pb] += E_grid_h
+
         monthly_GHI[mi]    = (day_GHI / 1000.0) * n_days
         monthly_Gf[mi]     = (day_Gf  / 1000.0) * n_days
         monthly_E_arr[mi]  = day_E_arr  * n_days
@@ -695,6 +707,9 @@ def simulate_fast(params: dict) -> dict:
         for b in range(N_BINS):
             hist_arr_acc[b]  += day_hist_arr[b]  * n_days
             hist_grid_acc[b] += day_hist_grid[b] * n_days
+        for pb in range(N_PWR_BINS + 1):
+            hist_pwr_arr_acc[pb]  += day_hist_pwr_arr[pb]  * n_days
+            hist_pwr_grid_acc[pb] += day_hist_pwr_grid[pb] * n_days
 
     # ── Fatores de transposição ───────────────────────────────────────────────
     FT_frontal  = acc_Gf  / acc_GHI if acc_GHI > 0 else 0.0
@@ -704,7 +719,7 @@ def simulate_fast(params: dict) -> dict:
 
     # ── Performance Ratio ─────────────────────────────────────────────────────
     Yf       = acc_E_grid / P_nom_stc if P_nom_stc > 0 else 0.0
-    Yr       = acc_Gf if acc_Gf > 0 else 1.0
+    Yr       = acc_Gb if acc_Gb > 0 else 1.0
     PR_pct   = (Yf / Yr * 100.0) if Yr > 0 else 0.0
 
     # ── Histograma ────────────────────────────────────────────────────────────
@@ -717,8 +732,10 @@ def simulate_fast(params: dict) -> dict:
     loss_inv_pct  = ((acc_E_arr - acc_E_grid) / acc_E_arr * 100.0
                      if acc_E_arr > 0 else 0.0)
 
+    ft_gain_pct = round((FT_frontal - 1) * 100, 2)
     loss_chain = [
         {'label': 'GHI horizontal',                       'value': round(acc_GHI, 1),           'unit': 'kWh/m²', 'tipo': 'total'},
+        {'label': 'Transposição (plano inclinado)',        'value': ft_gain_pct,                 'unit': '%',       'tipo': 'ganho' if ft_gain_pct >= 0 else 'perda'},
         {'label': 'G frontal inclinado',                   'value': round(acc_Gf, 1),            'unit': 'kWh/m²', 'tipo': 'total'},
         {'label': 'Ganho bifacial',                        'value': round(ganho_bif, 2),         'unit': '%',       'tipo': 'bifacial'},
         {'label': 'G efetivo bifacial',                    'value': round(acc_Gb, 1),            'unit': 'kWh/m²', 'tipo': 'total'},
@@ -750,48 +767,142 @@ def simulate_fast(params: dict) -> dict:
         'modulo_nome':      mod.get('modelo', ''),
         'inversor_nome':    inv.get('modelo', ''),
         'nasa_source':      nasa_source,
+        'N_s':              N_s,
+        'N_strings':        N_strings,
+        'hist_power_bins':  [round(i * pwr_bin_kw, 2) for i in range(N_PWR_BINS + 2)],
+        'hist_power_arr':   [round(v / 1000, 3) for v in hist_pwr_arr_acc],
+        'hist_power_grid':  [round(v / 1000, 3) for v in hist_pwr_grid_acc],
+        'modulo_elec': {
+            'Voc':     mod.get('Voc',     0.0),
+            'Isc':     mod.get('Isc',     0.0),
+            'Vmpp':    mod.get('Vmpp',    0.0),
+            'Impp':    mod.get('Impp',    0.0),
+            'mu_Voc':  mod.get('mu_Voc',  -0.25),
+            'mu_Isc':  mod.get('mu_Isc',  0.05),
+            'mu_Pmpp': mod.get('mu_Pmpp', -0.29),
+            'N_cs':    mod.get('N_cs',    66),
+            'gamma':   mod.get('gamma',   1.04),
+            'I0_ref':  mod.get('I0_ref',  2e-11),
+            'Iph_ref': mod.get('Iph_ref', 0.0),
+            'Rs':      mod.get('Rs',      0.135),
+            'Rsh':     mod.get('Rsh',     200.0),
+            'A_mod':   mod.get('A_mod',   3.106352),
+        },
+        'inversor_elec': {
+            'V_mpp_min': inv.get('V_mpp_min', 0),
+            'V_mpp_max': inv.get('V_mpp_max', 1500),
+            'V_dc_max':  inv.get('V_dc_max',  1500),
+        },
+        'input_params': {
+            'lat': lat, 'lon': lon, 'tz': tz,
+            'tilt': tilt, 'az': az_panel,
+        },
     }
+
+def calc_ft_curve(lat: float, lon: float, tz: float,
+                  tilt: float, az: float, nasa_data: dict) -> dict:
+    """
+    Calcula o fator de transposição anual em função da inclinação e do azimute.
+    Usa o mesmo método de 12 dias representativos de simulate_fast (sem ray-tracing).
+    Retorna tilt_curve [[tilt, FT], ...] e az_curve [[az, FT], ...].
+    """
+    NASA_GHI = nasa_data['ghi']
+
+    def _ft_annual(t, a):
+        acc_Gf = acc_GHI = 0.0
+        for m in range(1, 13):
+            mi      = m - 1
+            doy     = MONTH_START_DAY[mi] + 14
+            dly_GHI = NASA_GHI.get(m, 5.0)
+            Kd      = calc_daily_kd(doy, dly_GHI, lat)
+            n_days  = DAYS_PER_MONTH[mi]
+            day_Gf = day_GHI = 0.0
+            for hour in range(24):
+                GHI, DNI, DHI, HSun, AzSun, ENI = calc_ghi_hourly(
+                    doy, hour, dly_GHI, Kd, lat, lon, tz)
+                if GHI < 1.0:
+                    continue
+                Gf, _ = calc_ft_frontal(HSun, AzSun, GHI, DNI, DHI, ENI, 0.25, t, a)
+                day_Gf  += Gf
+                day_GHI += GHI
+            acc_Gf  += day_Gf  * n_days
+            acc_GHI += day_GHI * n_days
+        return acc_Gf / acc_GHI if acc_GHI > 0 else 0.0
+
+    tilts      = list(range(0, 91, 5))
+    tilt_curve = [[t, round(_ft_annual(t, az), 4)]   for t in tilts]
+    opt_t      = max(tilt_curve, key=lambda x: x[1])
+
+    azs        = list(range(-90, 91, 5))
+    az_curve   = [[a, round(_ft_annual(tilt, a), 4)] for a in azs]
+    opt_a      = max(az_curve, key=lambda x: x[1])
+
+    return {
+        'tilt_curve':       tilt_curve,
+        'az_curve':         az_curve,
+        'optimal_tilt':     opt_t[0],
+        'FT_optimal_tilt':  opt_t[1],
+        'optimal_az':       opt_a[0],
+        'FT_optimal_az':    opt_a[1],
+        'FT_current':       round(_ft_annual(tilt, az), 4),
+        'current_tilt':     tilt,
+        'current_az':       az,
+    }
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 11. Catálogo de módulos (parâmetros derivados dos arquivos .PAN)
 # ─────────────────────────────────────────────────────────────────────────────
 
 CATALOGO_MODULOS = {
+    'CS7N-700TB-AG': dict(
+        modelo='CS7N-700TB-AG', fabricante='CSI Solar Co., Ltd.', tecnologia='Mono-Si bifacial',
+        Pmpp=700.0, Vmpp=40.00, Voc=47.90, Impp=17.510, Isc=18.490,
+        mu_Pmpp=-0.290, mu_Voc=-0.2499, mu_Isc=0.0500,
+        NOCT=45.0, phi=0.800, N_cs=66, eta=22.53, A_mod=3.106352,
+        gamma=1.066, I0_ref=2.51e-11, Iph_ref=18.490, Rs=0.136, Rsh=200.0,
+    ),
+    'CS7N-705TB-AG': dict(
+        modelo='CS7N-705TB-AG', fabricante='CSI Solar Co., Ltd.', tecnologia='Mono-Si bifacial',
+        Pmpp=705.0, Vmpp=40.20, Voc=48.10, Impp=17.550, Isc=18.540,
+        mu_Pmpp=-0.290, mu_Voc=-0.2489, mu_Isc=0.0498,
+        NOCT=45.0, phi=0.800, N_cs=66, eta=22.70, A_mod=3.106352,
+        gamma=1.038, I0_ref=2.51e-11, Iph_ref=18.540, Rs=0.135, Rsh=200.0,
+    ),
+    'CS7N-710TB-AG': dict(
+        modelo='CS7N-710TB-AG', fabricante='CSI Solar Co., Ltd.', tecnologia='Mono-Si bifacial',
+        Pmpp=710.0, Vmpp=40.40, Voc=48.30, Impp=17.590, Isc=18.590,
+        mu_Pmpp=-0.290, mu_Voc=-0.2478, mu_Isc=0.0497,
+        NOCT=45.0, phi=0.800, N_cs=66, eta=22.86, A_mod=3.106352,
+        gamma=1.040, I0_ref=2.37e-11, Iph_ref=18.590, Rs=0.135, Rsh=200.0,
+    ),
+    'CS7N-715TB-AG': dict(
+        modelo='CS7N-715TB-AG', fabricante='CSI Solar Co., Ltd.', tecnologia='Mono-Si bifacial',
+        Pmpp=715.0, Vmpp=40.60, Voc=48.50, Impp=17.630, Isc=18.640,
+        mu_Pmpp=-0.290, mu_Voc=-0.2458, mu_Isc=0.0500,
+        NOCT=45.0, phi=0.800, N_cs=66, eta=23.02, A_mod=3.106352,
+        gamma=1.042, I0_ref=2.24e-11, Iph_ref=18.640, Rs=0.135, Rsh=200.0,
+    ),
     'CS7N-720TB-AG': dict(
-        modelo='CS7N-720TB-AG',
-        fabricante='CSI Solar Co., Ltd.',
-        tecnologia='Mono-Si bifacial',
-        Pmpp=720.0, Vmpp=40.80, Voc=48.70,
-        Impp=17.670, Isc=18.690,
+        modelo='CS7N-720TB-AG', fabricante='CSI Solar Co., Ltd.', tecnologia='Mono-Si bifacial',
+        Pmpp=720.0, Vmpp=40.80, Voc=48.70, Impp=17.670, Isc=18.690,
         mu_Pmpp=-0.290, mu_Voc=-0.2448, mu_Isc=0.0499,
-        NOCT=41.0, phi=0.80, N_cs=132,
-        eta=23.2, A_mod=3.106732,
-        gamma=1.043, I0_ref=1.937e-5, Iph_ref=18.703,
-        Rs=0.135, Rsh=200.0,
+        NOCT=45.0, phi=0.800, N_cs=66, eta=23.18, A_mod=3.106352,
+        gamma=1.043, I0_ref=2.06e-11, Iph_ref=18.690, Rs=0.135, Rsh=200.0,
+    ),
+    'CS7N-725TB-AG': dict(
+        modelo='CS7N-725TB-AG', fabricante='CSI Solar Co., Ltd.', tecnologia='Mono-Si bifacial',
+        Pmpp=725.0, Vmpp=41.00, Voc=48.90, Impp=17.710, Isc=18.740,
+        mu_Pmpp=-0.290, mu_Voc=-0.2438, mu_Isc=0.0497,
+        NOCT=45.0, phi=0.800, N_cs=66, eta=23.34, A_mod=3.106352,
+        gamma=1.045, I0_ref=1.94e-11, Iph_ref=18.740, Rs=0.136, Rsh=210.0,
     ),
     'CS7N-730TB-AG': dict(
-        modelo='CS7N-730TB-AG',
-        fabricante='CSI Solar Co., Ltd.',
-        tecnologia='Mono-Si bifacial',
-        Pmpp=730.0, Vmpp=41.20, Voc=49.10,
-        Impp=17.750, Isc=18.790,
+        modelo='CS7N-730TB-AG', fabricante='CSI Solar Co., Ltd.', tecnologia='Mono-Si bifacial',
+        Pmpp=730.0, Vmpp=41.20, Voc=49.10, Impp=17.750, Isc=18.790,
         mu_Pmpp=-0.290, mu_Voc=-0.2428, mu_Isc=0.0496,
-        NOCT=41.0, phi=0.80, N_cs=132,
-        eta=23.5, A_mod=3.106732,
-        gamma=1.051, I0_ref=1.985e-5, Iph_ref=18.803,
-        Rs=0.135, Rsh=210.0,
-    ),
-    'CS7N-700TB-AG': dict(
-        modelo='CS7N-700TB-AG',
-        fabricante='CSI Solar Co., Ltd.',
-        tecnologia='Mono-Si bifacial',
-        Pmpp=700.0, Vmpp=40.00, Voc=47.90,
-        Impp=17.510, Isc=18.490,
-        mu_Pmpp=-0.290, mu_Voc=-0.2498, mu_Isc=0.0499,
-        NOCT=41.0, phi=0.80, N_cs=132,
-        eta=22.5, A_mod=3.106732,
-        gamma=1.066, I0_ref=1.80e-5, Iph_ref=18.503,
-        Rs=0.136, Rsh=200.0,
+        NOCT=45.0, phi=0.800, N_cs=66, eta=23.50, A_mod=3.106352,
+        gamma=1.051, I0_ref=2.04e-11, Iph_ref=18.790, Rs=0.135, Rsh=210.0,
     ),
 }
 
@@ -800,64 +911,224 @@ CATALOGO_MODULOS = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 CATALOGO_INVERSORES = {
-    'CSI-250K-T8001A-E': dict(
-        modelo='CSI-250K-T8001A-E',
-        fabricante='CSI Solar Co., Ltd.',
-        P_nomAC=250.0, P_maxAC=250.0,
-        eta_max=99.0, eta_euro=98.8,
-        V_dc_max=1500, V_mpp_min=500, V_mpp_max=1500, V_nom=1090,
-        N_mppt=12, N_str_max=24,
-        profil_curves={
-            'V2': [
-                (1250,      0),
-                (12500,  12126.3),
-                (25000,  24592.5),
-                (50000,  49420.0),
-                (62500,  61825.0),
-                (75000,  74227.5),
-                (125000, 123762.5),
-                (187500, 185531.2),
-                (250000, 247150.0),
-            ],
-        },
+    # ── Série S — monofásico residencial ─────────────────────────────────────
+    'CSI-5K-S22003-E': dict(
+        modelo='CSI-5K-S22003-E', fabricante='CSI Solar Co., Ltd.',
+        P_nomAC=5.0, P_maxAC=5.0, eta_max=97.50, eta_euro=96.80,
+        V_dc_max=600, V_mpp_min=100, V_mpp_max=500, V_nom=360, N_mppt=2, N_str_max=2,
+        profil_curves={'V2': [
+            (24.8,0.0),(250.0,234.4),(500.0,481.5),(1000.0,973.1),
+            (1250.0,1217.6),(1500.0,1462.0),(2500.0,2436.7),(3750.0,3640.9),(5000.0,4848.5),
+        ]},
     ),
-    'SUN2000-215KTL-H3': dict(
-        modelo='SUN2000-215KTL-H3',
-        fabricante='Huawei Technologies',
-        P_nomAC=200.0, P_maxAC=215.0,
-        eta_max=99.03, eta_euro=98.78,
-        V_dc_max=1500, V_mpp_min=500, V_mpp_max=1500, V_nom=1080,
-        N_mppt=3, N_str_max=14,
-        profil_curves={
-            'V2': [
-                (180,        0),
-                (20431.1,  20000.0),
-                (50556.1,  50000.0),
-                (111077.5, 110000.0),
-                (151837.2, 150000.0),
-                (202695.9, 200000.0),
-            ],
-        },
+    'CSI-7K-S22003-E': dict(
+        modelo='CSI-7K-S22003-E', fabricante='CSI Solar Co., Ltd.',
+        P_nomAC=7.0, P_maxAC=7.0, eta_max=97.50, eta_euro=96.80,
+        V_dc_max=600, V_mpp_min=100, V_mpp_max=500, V_nom=360, N_mppt=2, N_str_max=2,
+        profil_curves={'V2': [
+            (34.7,0.0),(350.0,339.1),(700.0,684.0),(1400.0,1373.0),
+            (1750.0,1716.7),(2100.0,2059.5),(3500.0,3424.1),(5250.0,5117.2),(7000.0,6799.1),
+        ]},
+    ),
+    'CSI-9K-S22003-E': dict(
+        modelo='CSI-9K-S22003-E', fabricante='CSI Solar Co., Ltd.',
+        P_nomAC=9.0, P_maxAC=9.0, eta_max=97.50, eta_euro=96.80,
+        V_dc_max=600, V_mpp_min=100, V_mpp_max=500, V_nom=360, N_mppt=2, N_str_max=2,
+        profil_curves={'V2': [
+            (34.7,0.0),(450.0,436.0),(900.0,879.5),(1800.0,1765.3),
+            (2250.0,2207.2),(2700.0,2647.9),(4500.0,4402.4),(6750.0,6579.2),(9000.0,8741.7),
+        ]},
+    ),
+    # ── Série T2201A — trifásico string 220 V ────────────────────────────────
+    'CSI-50K-T2201A-E': dict(
+        modelo='CSI-50K-T2201A-E', fabricante='CSI Solar Co., Ltd.',
+        P_nomAC=50.0, P_maxAC=50.0, eta_max=99.0, eta_euro=98.60,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=560, N_mppt=6, N_str_max=2,
+        profil_curves={'V2': [
+            (250.0,0.0),(2500.0,2293.0),(5000.0,4602.0),(10000.0,9643.0),
+            (12500.0,12083.7),(15000.0,14523.0),(25000.0,24220.0),(37500.0,36285.0),(50000.0,48280.0),
+        ]},
+    ),
+    'CSI-60K-T2201A-E': dict(
+        modelo='CSI-60K-T2201A-E', fabricante='CSI Solar Co., Ltd.',
+        P_nomAC=60.0, P_maxAC=60.0, eta_max=99.0, eta_euro=98.60,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=560, N_mppt=6, N_str_max=2,
+        profil_curves={'V2': [
+            (250.0,0.0),(3000.0,2813.7),(6000.0,5716.2),(12000.0,11598.0),
+            (15000.0,14524.5),(18000.0,17442.0),(30000.0,29064.0),(45000.0,43488.0),(60000.0,57828.0),
+        ]},
+    ),
+    'CSI-75K-T2201A-E': dict(
+        modelo='CSI-75K-T2201A-E', fabricante='CSI Solar Co., Ltd.',
+        P_nomAC=75.0, P_maxAC=75.0, eta_max=99.0, eta_euro=98.60,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=560, N_mppt=6, N_str_max=2,
+        profil_curves={'V2': [
+            (250.0,0.0),(3750.0,3479.2),(7500.0,7197.0),(15000.0,14526.0),
+            (18750.0,18170.6),(22500.0,21818.3),(37500.0,36285.0),(56250.0,54253.1),(75000.0,72090.0),
+        ]},
+    ),
+    # ── Série T4001A — trifásico string 400 V ────────────────────────────────
+    'CSI-15K-T4001A-E': dict(
+        modelo='CSI-15K-T4001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=15.0, P_maxAC=15.0, eta_max=98.43, eta_euro=98.14,
+        V_dc_max=1100, V_mpp_min=160, V_mpp_max=1000, V_nom=635, N_mppt=2, N_str_max=2,
+        profil_curves={'V2': [
+            (123.8,0.0),(750.0,693.4),(1500.0,1434.3),(3000.0,2913.3),
+            (3750.0,3651.7),(4500.0,4389.3),(7500.0,7329.8),(11250.0,10985.6),(15000.0,14613.0),
+        ]},
+    ),
+    'CSI-17K-T4001A-E': dict(
+        modelo='CSI-17K-T4001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=17.0, P_maxAC=17.0, eta_max=98.43, eta_euro=98.14,
+        V_dc_max=1100, V_mpp_min=160, V_mpp_max=1000, V_nom=635, N_mppt=2, N_str_max=2,
+        profil_curves={'V2': [
+            (123.8,0.0),(850.0,791.9),(1700.0,1631.0),(3400.0,3306.8),
+            (4250.0,4145.0),(5100.0,4980.7),(8500.0,8309.6),(12750.0,12436.4),(17000.0,16551.2),
+        ]},
+    ),
+    'CSI-20K-T4001A-E': dict(
+        modelo='CSI-20K-T4001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=20.0, P_maxAC=20.0, eta_max=98.43, eta_euro=98.14,
+        V_dc_max=1100, V_mpp_min=160, V_mpp_max=1000, V_nom=635, N_mppt=2, N_str_max=2,
+        profil_curves={'V2': [
+            (123.8,0.0),(1000.0,935.4),(2000.0,1925.2),(4000.0,3900.4),
+            (5000.0,4886.5),(6000.0,5871.0),(10000.0,9795.0),(15000.0,14668.5),(20000.0,19506.0),
+        ]},
+    ),
+    'CSI-23K-T4001A-E': dict(
+        modelo='CSI-23K-T4001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=23.0, P_maxAC=23.0, eta_max=98.43, eta_euro=98.14,
+        V_dc_max=1100, V_mpp_min=160, V_mpp_max=1000, V_nom=635, N_mppt=2, N_str_max=2,
+        profil_curves={'V2': [
+            (123.8,0.0),(1150.0,1085.1),(2300.0,2222.7),(4600.0,4493.3),
+            (5750.0,5626.4),(6900.0,6755.8),(11500.0,11264.2),(17250.0,16856.7),(23000.0,22395.1),
+        ]},
+    ),
+    'CSI-25K-T4001A-E': dict(
+        modelo='CSI-25K-T4001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=25.0, P_maxAC=25.0, eta_max=98.43, eta_euro=98.14,
+        V_dc_max=1100, V_mpp_min=160, V_mpp_max=1000, V_nom=635, N_mppt=2, N_str_max=2,
+        profil_curves={'V2': [
+            (123.8,0.0),(1250.0,1184.9),(2500.0,2421.0),(5000.0,4888.5),
+            (6250.0,6119.4),(7500.0,7347.0),(12500.0,12238.8),(18750.0,18303.8),(25000.0,24305.0),
+        ]},
+    ),
+    'CSI-40K-T4001A-E': dict(
+        modelo='CSI-40K-T4001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=40.0, P_maxAC=44.0, eta_max=98.43, eta_euro=98.14,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=600, N_mppt=3, N_str_max=2,
+        profil_curves={'V2': [
+            (198.0,0.0),(2000.0,1833.6),(4000.0,3824.0),(8000.0,7761.6),
+            (10000.0,9736.0),(12000.0,11694.0),(20000.0,19552.0),(30000.0,29367.0),(40000.0,39052.0),
+        ]},
     ),
     'CSI-50K-T4001A-E': dict(
-        modelo='CSI-50K-T4001A-E',
-        fabricante='CSI Solar Co., Ltd.',
-        P_nomAC=50.0, P_maxAC=55.0,
-        eta_max=98.43, eta_euro=98.14,
-        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=600,
-        N_mppt=4, N_str_max=8,
-        profil_curves={
-            'V2': [
-                (198,      0),
-                (2500,   2335.3),
-                (5000,   4806.0),
-                (10000,  9735.0),
-                (12500, 12190.0),
-                (15000, 14649.0),
-                (25000, 24457.5),
-                (37500, 36641.2),
-                (50000, 48745.0),
-            ],
-        },
+        modelo='CSI-50K-T4001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=50.0, P_maxAC=55.0, eta_max=98.43, eta_euro=98.14,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=600, N_mppt=4, N_str_max=2,
+        profil_curves={'V2': [
+            (198.0,0.0),(2500.0,2335.3),(5000.0,4806.0),(10000.0,9735.0),
+            (12500.0,12190.0),(15000.0,14649.0),(25000.0,24457.5),(37500.0,36641.2),(50000.0,48745.0),
+        ]},
+    ),
+    'CSI-60K-T4001A-E': dict(
+        modelo='CSI-60K-T4001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=60.0, P_maxAC=60.0, eta_max=98.43, eta_euro=98.14,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=600, N_mppt=5, N_str_max=2,
+        profil_curves={'V2': [
+            (198.0,0.0),(3000.0,2825.4),(6000.0,5790.0),(12000.0,11698.8),
+            (15000.0,14644.5),(18000.0,17598.6),(30000.0,29319.0),(45000.0,43884.0),(60000.0,58368.0),
+        ]},
+    ),
+    'CSI-75K-T40001-E': dict(
+        modelo='CSI-75K-T40001-E', fabricante='CSI Solar Inc',
+        P_nomAC=75.0, P_maxAC=75.0, eta_max=97.50, eta_euro=96.80,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=600, N_mppt=6, N_str_max=2,
+        profil_curves={'V2': [
+            (618.8,0.0),(3750.0,3570.4),(7500.0,7284.0),(15000.0,14695.5),
+            (18750.0,18401.2),(22500.0,22104.0),(37500.0,36937.5),(56250.0,55282.5),(75000.0,73582.5),
+        ]},
+    ),
+    'CSI-100K-T4001A-E': dict(
+        modelo='CSI-100K-T4001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=100.0, P_maxAC=100.0, eta_max=97.50, eta_euro=96.80,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=600, N_mppt=6, N_str_max=2,
+        profil_curves={'V2': [
+            (618.8,0.0),(5000.0,4836.5),(10000.0,9792.0),(20000.0,19686.0),
+            (25000.0,24622.5),(30000.0,29508.0),(50000.0,49105.0),(75000.0,73582.5),(100000.0,97990.0),
+        ]},
+    ),
+    'CSI-100K-T4001B-E': dict(
+        modelo='CSI-100K-T4001B-E', fabricante='CSI Solar Inc',
+        P_nomAC=100.0, P_maxAC=100.0, eta_max=97.50, eta_euro=96.80,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=600, N_mppt=9, N_str_max=2,
+        profil_curves={'V2': [
+            (618.8,0.0),(5000.0,4836.0),(10000.0,9793.0),(20000.0,19684.0),
+            (25000.0,24622.5),(30000.0,29502.0),(50000.0,49090.0),(75000.0,73575.0),(100000.0,97870.0),
+        ]},
+    ),
+    'CSI-110K-T4001A-E': dict(
+        modelo='CSI-110K-T4001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=110.0, P_maxAC=110.0, eta_max=97.50, eta_euro=96.80,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=600, N_mppt=6, N_str_max=2,
+        profil_curves={'V2': [
+            (618.8,0.0),(5500.0,5294.8),(11000.0,10737.1),(22000.0,21595.2),
+            (27500.0,27013.3),(33000.0,32422.5),(55000.0,54180.5),(82500.0,80833.5),(110000.0,107382.0),
+        ]},
+    ),
+    'CSI-110K-T4001B-E': dict(
+        modelo='CSI-110K-T4001B-E', fabricante='CSI Solar Inc',
+        P_nomAC=110.0, P_maxAC=110.0, eta_max=97.50, eta_euro=96.80,
+        V_dc_max=1100, V_mpp_min=200, V_mpp_max=1000, V_nom=600, N_mppt=9, N_str_max=2,
+        profil_curves={'V2': [
+            (618.8,0.0),(5500.0,5330.6),(11000.0,10771.2),(22000.0,21643.6),
+            (27500.0,27076.5),(33000.0,32498.4),(55000.0,54131.0),(82500.0,81089.3),(110000.0,107074.0),
+        ]},
+    ),
+    # ── Série T8001 — central 800 V AC ───────────────────────────────────────
+    'CSI-250K-T8001A-E': dict(
+        modelo='CSI-250K-T8001A-E', fabricante='CSI Solar Co., Ltd.',
+        P_nomAC=250.0, P_maxAC=250.0, eta_max=99.00, eta_euro=98.80,
+        V_dc_max=1500, V_mpp_min=500, V_mpp_max=1500, V_nom=1200, N_mppt=12, N_str_max=2,
+        profil_curves={'V2': [
+            (1250.0,0.0),(12500.0,12126.3),(25000.0,24592.5),(50000.0,49420.0),
+            (62500.0,61825.0),(75000.0,74227.5),(125000.0,123762.5),(187500.0,185531.2),(250000.0,247150.0),
+        ]},
+    ),
+    'CSI-333K-T8001A-E': dict(
+        modelo='CSI-333K-T8001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=333.0, P_maxAC=333.0, eta_max=97.50, eta_euro=96.80,
+        V_dc_max=1500, V_mpp_min=500, V_mpp_max=1500, V_nom=1200, N_mppt=12, N_str_max=2,
+        profil_curves={'V2': [
+            (1732.5,0.0),(16650.0,16247.1),(33300.0,32840.5),(66600.0,65907.4),
+            (83250.0,82417.5),(99900.0,98851.0),(166500.0,164818.3),(249750.0,246952.8),(333000.0,328737.6),
+        ]},
+    ),
+    'CSI-333K-T8001B-E': dict(
+        modelo='CSI-333K-T8001B-E', fabricante='CSI Solar Inc',
+        P_nomAC=333.0, P_maxAC=333.0, eta_max=97.50, eta_euro=96.80,
+        V_dc_max=1500, V_mpp_min=500, V_mpp_max=1500, V_nom=1200, N_mppt=16, N_str_max=2,
+        profil_curves={'V2': [
+            (1732.5,0.0),(16650.0,16178.8),(33300.0,32810.5),(66600.0,65880.7),
+            (83250.0,82400.9),(99900.0,98891.0),(166500.0,164851.7),(249750.0,246927.8),(333000.0,328870.8),
+        ]},
+    ),
+    'CSI-350K-T8001A-E': dict(
+        modelo='CSI-350K-T8001A-E', fabricante='CSI Solar Inc',
+        P_nomAC=350.0, P_maxAC=350.0, eta_max=99.01, eta_euro=98.80,
+        V_dc_max=1500, V_mpp_min=500, V_mpp_max=1500, V_nom=1200, N_mppt=12, N_str_max=2,
+        profil_curves={'V2': [
+            (1732.5,0.0),(17500.0,17078.2),(35000.0,34478.5),(70000.0,69216.0),
+            (87500.0,86555.0),(105000.0,103960.5),(175000.0,173232.5),(262500.0,259455.0),(350000.0,345380.0),
+        ]},
+    ),
+    'CSI-350K-T8001B-E': dict(
+        modelo='CSI-350K-T8001B-E', fabricante='CSI Solar Inc',
+        P_nomAC=350.0, P_maxAC=350.0, eta_max=99.01, eta_euro=98.81,
+        V_dc_max=1500, V_mpp_min=500, V_mpp_max=1500, V_nom=1200, N_mppt=16, N_str_max=2,
+        profil_curves={'V2': [
+            (1732.5,0.0),(17500.0,17125.5),(35000.0,34520.5),(70000.0,69272.0),
+            (87500.0,86616.2),(105000.0,103960.5),(175000.0,173232.5),(262500.0,259455.0),(350000.0,345555.0),
+        ]},
     ),
 }

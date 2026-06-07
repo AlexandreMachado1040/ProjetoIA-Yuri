@@ -1,31 +1,22 @@
-import ProducaoMensalChart from './ProducaoMensalChart'
-import IrradianciaChart    from './IrradianciaChart'
-import HistogramaChart     from './HistogramaChart'
-import LossDiagram         from './LossDiagram'
+import ProducaoMensalChart   from './ProducaoMensalChart'
+import IrradianciaChart      from './IrradianciaChart'
+import HistogramaChart       from './HistogramaChart'
+import LossDiagram           from './LossDiagram'
+import IVCurveChart          from './IVCurveChart'
+import PowerHistogramChart   from './PowerHistogramChart'
+import FTCurveChart          from './FTCurveChart'
 
 export default function ResultsDashboard({ resultado }) {
   if (!resultado) return null
 
   const {
-    E_grid_anual_kWh,
-    PR_pct,
-    GHI_anual,
-    FT_frontal,
-    FT_bifacial,
-    ganho_bif_pct,
-    P_nom_stc_kWp,
-    P_nom_AC_kW,
-    monthly_GHI,
-    monthly_Gf,
-    monthly_E_arr,
-    monthly_E_grid,
-    hist_bins,
-    hist_arr,
-    hist_grid,
-    loss_chain,
-    modulo_nome,
-    inversor_nome,
-    nasa_source,
+    E_grid_anual_kWh, PR_pct, GHI_anual,
+    FT_frontal, FT_bifacial, ganho_bif_pct,
+    P_nom_stc_kWp, P_nom_AC_kW,
+    monthly_GHI, monthly_Gf, monthly_E_arr, monthly_E_grid,
+    hist_bins, hist_arr, hist_grid,
+    loss_chain, modulo_nome, inversor_nome, nasa_source,
+    input_params,
   } = resultado
 
   const E_grid_MWh = +(E_grid_anual_kWh / 1000).toFixed(1)
@@ -56,6 +47,8 @@ export default function ResultsDashboard({ resultado }) {
         <KPI label="R DC/AC"        value={R_DC_AC}                             color="gray" />
       </div>
 
+      <LossDiagram lossChain={loss_chain} resultado={resultado} />
+
       <ProducaoMensalChart
         monthlyGridKwh={monthly_E_grid}
         monthlyArrKwh={monthly_E_arr}
@@ -67,13 +60,17 @@ export default function ResultsDashboard({ resultado }) {
         bifacial={bifacial}
       />
 
+      <IVCurveChart resultado={resultado} />
+
+      <PowerHistogramChart resultado={resultado} />
+
       <HistogramaChart
         bins={hist_bins}
         histArr={hist_arr}
         histGrid={hist_grid}
       />
 
-      <LossDiagram lossChain={loss_chain} />
+      <FTCurveChart inputParams={input_params} />
     </div>
   )
 }
