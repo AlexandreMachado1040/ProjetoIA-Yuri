@@ -540,6 +540,9 @@ def simulate_fast(params: dict) -> dict:
     Uc           float   (opcional) sobrescreve coef. térmico condutivo [W/m²K]
     Uv           float   (opcional) sobrescreve coef. de vento [W·s/m³K]
     vento_ms     float   (opcional) vento médio para o termo Uv [m/s] (padrão 1,0)
+    degradacao_anual_pct float Taxa de degradação linear [%/ano] (padrão 0,5)
+    ano_operacao int     Ano de operação a simular (mid-year) (padrão 1)
+    vida_util_anos int   Horizonte para a série de degradação (padrão 25)
     modulo       dict    Parâmetros do módulo (veja CATALOGO_MODULOS)
     inversor     dict    Parâmetros do inversor (veja CATALOGO_INVERSORES)
 
@@ -590,6 +593,15 @@ def simulate_fast(params: dict) -> dict:
     Uv_term = float(params.get('Uv', _preset['Uv']))
     vento_ms = float(params.get('vento_ms', 1.0))      # vento médio [m/s]
     U_value  = max(Uc_term + Uv_term * vento_ms, 1.0)  # W/m²K (evita div/0)
+
+    # Degradação dos módulos (PVSyst): taxa anual linear, cálculo "mid-year"
+    # → no ano N aplica-se a degradação de (N − 0,5) anos.
+    degradacao_anual_pct = float(params.get('degradacao_anual_pct', 0.5))
+    ano_operacao   = max(1, int(params.get('ano_operacao', 1)))
+    vida_util_anos = max(1, int(params.get('vida_util_anos', 25)))
+    _deg_rate = max(0.0, degradacao_anual_pct) / 100.0
+    _fator_deg = lambda ano: max(1.0 - _deg_rate * max(ano - 0.5, 0.0), 0.0)
+    fator_deg = _fator_deg(ano_operacao)
 
     mod = params['modulo']
     inv = params['inversor']
@@ -643,6 +655,7 @@ def simulate_fast(params: dict) -> dict:
     acc_E_arr_noT  = 0.0   # energia DC sem perda de temperatura (só f_DC)
     acc_E_cabo     = 0.0   # energia perdida no cabeamento CC (ôhmica)
     acc_E_soil     = 0.0   # energia perdida por sujidade (irradiância)
+    acc_E_deg      = 0.0   # energia perdida por degradação (ano de operação)
 
     # Histograma: bins de 100 W/m² em Gf (0-100, 100-200, ..., 900-1000, >1000)
     N_BINS = 11
@@ -672,6 +685,7 @@ def simulate_fast(params: dict) -> dict:
         day_E_arr_noT = 0.0
         day_E_cabo    = 0.0
         day_E_soil    = 0.0
+        day_E_deg     = 0.0
         day_Gf        = 0.0
         day_Gb        = 0.0
         day_hist_arr  = [0.0] * N_BINS
@@ -722,7 +736,11 @@ def simulate_fast(params: dict) -> dict:
             # → quadrática na potência, logo fração ∝ corrente/irradiância.
             P_cabo    = (c_cabo_stc * P_mpp * P_mpp / P_nom_stc
                          if P_nom_stc > 0 else 0.0)
-            P_dc      = max(P_mpp - P_cabo, 0.0)   # DC disponível na entrada do inversor
+            P_dc_pre  = max(P_mpp - P_cabo, 0.0)   # após cabo, antes da degradação
+
+            # Degradação dos módulos (ano de operação): escala a potência DC
+            P_dc      = P_dc_pre * fator_deg
+            P_deg     = P_dc_pre - P_dc
 
             # Limitação DC → AC
             P_array   = min(P_dc, P_nom_DC)
@@ -734,6 +752,7 @@ def simulate_fast(params: dict) -> dict:
             day_Gb     += Gb
             day_E_arr  += P_mpp            # DC no MPP (antes do cabo)
             day_E_cabo += P_cabo
+            day_E_deg  += P_deg
             day_E_grid += E_grid_h
 
             # Acumuladores para diagrama de perdas
@@ -765,6 +784,7 @@ def simulate_fast(params: dict) -> dict:
         acc_E_arr_noT  += day_E_arr_noT  * n_days
         acc_E_cabo     += day_E_cabo     * n_days
         acc_E_soil     += day_E_soil     * n_days
+        acc_E_deg      += day_E_deg      * n_days
         for b in range(N_BINS):
             hist_arr_acc[b]  += day_hist_arr[b]  * n_days
             hist_grid_acc[b] += day_hist_grid[b] * n_days
@@ -797,9 +817,13 @@ def simulate_fast(params: dict) -> dict:
     # Perda de cabo CC: % de energia (ponderada) sobre a DC no MPP antes do cabo
     loss_cabo_pct = (acc_E_cabo / acc_E_arr * 100.0
                      if acc_E_arr > 0 else 0.0)
-    E_arr_disp    = acc_E_arr - acc_E_cabo   # DC disponível na entrada do inversor
-    loss_inv_pct  = ((E_arr_disp - acc_E_grid) / E_arr_disp * 100.0
+    E_arr_disp    = acc_E_arr - acc_E_cabo   # DC após cabo, antes da degradação
+    # Degradação: % sobre a DC após cabo (= 1 − fator_deg)
+    loss_deg_pct  = (acc_E_deg / E_arr_disp * 100.0
                      if E_arr_disp > 0 else 0.0)
+    E_apos_deg    = E_arr_disp - acc_E_deg   # DC líquido na entrada do inversor
+    loss_inv_pct  = ((E_apos_deg - acc_E_grid) / E_apos_deg * 100.0
+                     if E_apos_deg > 0 else 0.0)
 
     ft_gain_pct = round((FT_frontal - 1) * 100, 2)
     loss_chain = [
@@ -814,10 +838,21 @@ def simulate_fast(params: dict) -> dict:
         {'label': 'Perdas DC (mismatch+LID)',              'value': -round(loss_dc_pct, 1),      'unit': '%',       'tipo': 'perda'},
         {'label': 'E_Array DC (no MPP)',                   'value': round(acc_E_arr / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
         {'label': f'Perdas cabo CC (ôhmica, {perda_cabo_cc_pct:g}% STC)', 'value': -round(loss_cabo_pct, 2), 'unit': '%', 'tipo': 'perda'},
-        {'label': 'E_Array disponível',                    'value': round(E_arr_disp / 1000, 1), 'unit': 'MWh',    'tipo': 'total'},
+        {'label': f'Perdas degradação (ano {ano_operacao}, {degradacao_anual_pct:g}%/ano)', 'value': -round(loss_deg_pct, 2), 'unit': '%', 'tipo': 'perda'},
+        {'label': 'E_Array disponível',                    'value': round(E_apos_deg / 1000, 1), 'unit': 'MWh',    'tipo': 'total'},
         {'label': 'Perdas inversor',                       'value': -round(loss_inv_pct, 1),     'unit': '%',       'tipo': 'perda'},
         {'label': 'E_Grid (rede)',                         'value': round(acc_E_grid / 1000, 1), 'unit': 'MWh',    'tipo': 'total'},
     ]
+
+    # Série de degradação ao longo da vida útil (escala linear sobre o ano base)
+    E_grid_base = acc_E_grid / fator_deg if fator_deg > 0 else acc_E_grid
+    degradacao_serie = [
+        {'ano': a, 'fator_pct': round(_fator_deg(a) * 100, 2),
+         'E_grid_kWh': round(E_grid_base * _fator_deg(a), 1)}
+        for a in range(1, vida_util_anos + 1)
+    ]
+    E_grid_media_vida = round(
+        sum(s['E_grid_kWh'] for s in degradacao_serie) / len(degradacao_serie), 1)
 
     return {
         'E_grid_anual_kWh': round(acc_E_grid, 1),
@@ -837,6 +872,13 @@ def simulate_fast(params: dict) -> dict:
         'U_value':               round(U_value, 1),
         'Uc':                    round(Uc_term, 1),
         'Uv':                    round(Uv_term, 2),
+        'degradacao_anual_pct':  round(degradacao_anual_pct, 2),
+        'ano_operacao':          ano_operacao,
+        'fator_degradacao_pct':  round(fator_deg * 100, 2),
+        'loss_degradacao_pct':   round(loss_deg_pct, 2),
+        'vida_util_anos':        vida_util_anos,
+        'degradacao_serie':      degradacao_serie,
+        'E_grid_media_vida_kWh': E_grid_media_vida,
         'monthly_GHI':      [round(v, 2) for v in monthly_GHI],
         'monthly_Gf':       [round(v, 2) for v in monthly_Gf],
         'monthly_E_arr':    [round(v, 1) for v in monthly_E_arr],

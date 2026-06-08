@@ -16,6 +16,8 @@ const DEFAULTS = {
   perda_cabo_cc_pct: 1.5,
   perda_sujidade_pct: 2.0,
   tipo_montagem: 'livre',
+  degradacao_anual_pct: 0.5,
+  ano_operacao: 1,
   modulo:     '',
   inversor:   '',
 }
@@ -85,6 +87,8 @@ export default function ConfigForm({ onSubmit, loading }) {
       perda_cabo_cc_pct: form.perda_cabo_cc_pct,
       perda_sujidade_pct: form.perda_sujidade_pct,
       tipo_montagem: form.tipo_montagem,
+      degradacao_anual_pct: form.degradacao_anual_pct,
+      ano_operacao: form.ano_operacao,
       modulo:     form.modulo,
       inversor:   form.inversor,
     })
@@ -204,6 +208,8 @@ export default function ConfigForm({ onSubmit, loading }) {
         </label>
         {field('Perda de cabo CC (% em STC)', 'perda_cabo_cc_pct', 'number', 0.1)}
         {field('Perda por sujidade (% anual)', 'perda_sujidade_pct', 'number', 0.1)}
+        {field('Degradação dos módulos (%/ano)', 'degradacao_anual_pct', 'number', 0.1)}
+        {field('Ano de operação', 'ano_operacao', 'number', 1)}
       </section>
 
       {form.bifacial && (
