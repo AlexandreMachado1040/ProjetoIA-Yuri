@@ -127,6 +127,7 @@ export default function ResultsDashboard({ resultado }) {
             </button>
             {!colapsado && (
               <>
+                <LossDiagram lossChain={s.loss_chain} resultado={s} />
                 <IVCurveChart resultado={s} />
                 <PowerHistogramChart resultado={s} />
                 <FTCurveChart inputParams={s.input_params} resultado={s} />
