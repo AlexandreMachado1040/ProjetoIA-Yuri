@@ -87,12 +87,16 @@ export default function ResultsDashboard({ resultado }) {
 
       {is_plant && subarrays?.map(s => (
         <div key={s.idx}>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-sub)', margin: '4px 2px' }}>
-            Sub-arranjo {s.idx} — {s.inversor_nome}
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-sub)', margin: '8px 2px 4px' }}>
+            Sub-arranjo {s.idx} — {s.inversor_nome} · {s.modulo_nome}
           </p>
+          <IVCurveChart resultado={s} />
           <PowerHistogramChart resultado={s} />
         </div>
       ))}
+
+      {/* No modo planta, a curva I-V do topo não renderiza (N_s é por sub-arranjo) */}
+      {!is_plant && <IVCurveChart resultado={resultado} />}
 
       <ProducaoMensalChart
         monthlyGridKwh={monthly_E_grid}
@@ -104,8 +108,6 @@ export default function ResultsDashboard({ resultado }) {
         monthlyGf={monthly_Gf}
         bifacial={bifacial}
       />
-
-      <IVCurveChart resultado={resultado} />
 
       <PowerHistogramChart resultado={resultado} />
 

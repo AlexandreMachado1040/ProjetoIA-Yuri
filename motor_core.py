@@ -1068,6 +1068,8 @@ def simulate_plant(params: dict) -> dict:
             'hist_power_bins':  r['hist_power_bins'],
             'hist_power_arr':   r['hist_power_arr'],
             'hist_power_grid':  r['hist_power_grid'],
+            'modulo_elec':      r['modulo_elec'],
+            'inversor_elec':    r['inversor_elec'],
             'input_params':     r['input_params'],
         })
 
