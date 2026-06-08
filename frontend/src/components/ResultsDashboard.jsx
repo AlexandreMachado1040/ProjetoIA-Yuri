@@ -89,9 +89,11 @@ export default function ResultsDashboard({ resultado }) {
         <div key={s.idx}>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-sub)', margin: '8px 2px 4px' }}>
             Sub-arranjo {s.idx} — {s.inversor_nome} · {s.modulo_nome}
+            {s.input_params && ` · ${s.input_params.tilt}° incl. / ${s.input_params.az}° az.`}
           </p>
           <IVCurveChart resultado={s} />
           <PowerHistogramChart resultado={s} />
+          <FTCurveChart inputParams={s.input_params} resultado={s} />
         </div>
       ))}
 
@@ -117,7 +119,7 @@ export default function ResultsDashboard({ resultado }) {
         histGrid={hist_grid}
       />
 
-      <FTCurveChart inputParams={input_params} resultado={resultado} />
+      {!is_plant && <FTCurveChart inputParams={input_params} resultado={resultado} />}
     </div>
   )
 }
