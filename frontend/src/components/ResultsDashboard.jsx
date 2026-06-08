@@ -16,7 +16,7 @@ export default function ResultsDashboard({ resultado }) {
     monthly_GHI, monthly_Gf, monthly_E_arr, monthly_E_grid,
     hist_bins, hist_arr, hist_grid,
     loss_chain, modulo_nome, inversor_nome, nasa_source,
-    input_params,
+    input_params, is_plant, subarrays,
   } = resultado
 
   const E_grid_MWh = +(E_grid_anual_kWh / 1000).toFixed(1)
@@ -48,6 +48,51 @@ export default function ResultsDashboard({ resultado }) {
       </div>
 
       <LossDiagram lossChain={loss_chain} resultado={resultado} />
+
+      {is_plant && subarrays?.length > 0 && (
+        <div className="chart-card">
+          <h3>Sub-arranjos ({subarrays.length} inversores)</h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+              <thead>
+                <tr style={{ color: 'var(--text-sub)', textAlign: 'right' }}>
+                  <th style={{ textAlign: 'left', padding: '4px 8px' }}>#</th>
+                  <th style={{ textAlign: 'left', padding: '4px 8px' }}>Inversor</th>
+                  <th style={{ textAlign: 'left', padding: '4px 8px' }}>Módulo</th>
+                  <th style={{ padding: '4px 8px' }}>Arranjo</th>
+                  <th style={{ padding: '4px 8px' }}>kWp</th>
+                  <th style={{ padding: '4px 8px' }}>R DC/AC</th>
+                  <th style={{ padding: '4px 8px' }}>E_Grid (kWh)</th>
+                  <th style={{ padding: '4px 8px' }}>PR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subarrays.map(s => (
+                  <tr key={s.idx} style={{ textAlign: 'right', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    <td style={{ textAlign: 'left', padding: '4px 8px' }}>{s.idx}</td>
+                    <td style={{ textAlign: 'left', padding: '4px 8px' }}>{s.inversor_nome}</td>
+                    <td style={{ textAlign: 'left', padding: '4px 8px' }}>{s.modulo_nome}</td>
+                    <td style={{ padding: '4px 8px' }}>{s.N_s}s×{s.N_strings}str</td>
+                    <td style={{ padding: '4px 8px' }}>{s.P_nom_stc_kWp}</td>
+                    <td style={{ padding: '4px 8px' }}>{s.R_DC_AC}</td>
+                    <td style={{ padding: '4px 8px' }}>{s.E_grid_anual_kWh?.toLocaleString('pt-BR')}</td>
+                    <td style={{ padding: '4px 8px' }}>{s.PR_pct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {is_plant && subarrays?.map(s => (
+        <div key={s.idx}>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-sub)', margin: '4px 2px' }}>
+            Sub-arranjo {s.idx} — {s.inversor_nome}
+          </p>
+          <PowerHistogramChart resultado={s} />
+        </div>
+      ))}
 
       <ProducaoMensalChart
         monthlyGridKwh={monthly_E_grid}

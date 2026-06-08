@@ -923,7 +923,190 @@ def simulate_fast(params: dict) -> dict:
             'lat': lat, 'lon': lon, 'tz': tz,
             'tilt': tilt, 'az': az_panel,
         },
+        # Acumuladores brutos (kWh; irradiância em kWh/m²) para agregação em
+        # simulate_plant. Não destinados ao frontend diretamente.
+        '_acc': {
+            'P_nom_stc': P_nom_stc, 'P_nom_AC': P_nom_AC,
+            'GHI': acc_GHI, 'Gf': acc_Gf, 'Gb': acc_Gb,
+            'E_stc': acc_E_stc, 'E_soil': acc_E_soil, 'E_stc_pre': E_stc_pre,
+            'E_arr_noT': acc_E_arr_noT, 'E_arr': acc_E_arr,
+            'E_cabo': acc_E_cabo, 'E_arr_disp': E_arr_disp,
+            'E_deg': acc_E_deg, 'E_apos_deg': E_apos_deg, 'E_grid': acc_E_grid,
+            'monthly_GHI': monthly_GHI, 'monthly_Gf': monthly_Gf,
+            'monthly_E_arr': monthly_E_arr, 'monthly_E_grid': monthly_E_grid,
+            'hist_arr': list(hist_arr_acc), 'hist_grid': list(hist_grid_acc),
+            'E_grid_base': E_grid_base,
+        },
     }
+
+def simulate_plant(params: dict) -> dict:
+    """
+    Simula uma usina com MÚLTIPLOS sub-arranjos (cada um com seu inversor e
+    configuração de módulos), somando os resultados. Cada sub-arranjo é simulado
+    por simulate_fast e os acumuladores brutos (_acc) são agregados.
+
+    params: além de lat/lon/tz/nasa_data e dos parâmetros globais de perda
+    (cabo, sujidade, montagem, degradação, vento, ray-tracing), espera
+    `subarrays`: lista de dicts com modulo, inversor (já resolvidos em dict),
+    N_s, N_strings, tilt, az, bifacial, pitch, mod_height (campos opcionais
+    herdam o valor global/padrão).
+    """
+    subarrays = params.get('subarrays') or []
+    if not subarrays:
+        # Sem lista → comportamento de sub-arranjo único (retrocompatível)
+        return simulate_fast(params)
+
+    # Chaves compartilhadas/globais propagadas a cada sub-arranjo
+    _shared_keys = (
+        'lat', 'lon', 'tz', 'nasa_data', 'N_seg', 'N_rays', 'albedo', 'vento_ms',
+        'perda_cabo_cc_pct', 'perda_sujidade_pct', 'perda_sujidade_mensal',
+        'tipo_montagem', 'Uc', 'Uv',
+        'degradacao_anual_pct', 'ano_operacao', 'vida_util_anos',
+    )
+    shared = {k: params[k] for k in _shared_keys if k in params}
+
+    resultados = []
+    for sa in subarrays:
+        sub_params = dict(shared)
+        sub_params.update(sa)          # campos do sub-arranjo sobrescrevem globais
+        resultados.append(simulate_fast(sub_params))
+
+    # ── Agrega acumuladores brutos ────────────────────────────────────────────
+    def _sum(key):
+        return sum(r['_acc'][key] for r in resultados)
+
+    def _sum_list(key):
+        n = len(resultados[0]['_acc'][key])
+        return [sum(r['_acc'][key][i] for r in resultados) for i in range(n)]
+
+    P_nom_stc = _sum('P_nom_stc')
+    P_nom_AC  = _sum('P_nom_AC')
+    E_stc     = _sum('E_stc');      E_soil    = _sum('E_soil')
+    E_stc_pre = _sum('E_stc_pre');  E_arr_noT = _sum('E_arr_noT')
+    E_arr     = _sum('E_arr');      E_cabo    = _sum('E_cabo')
+    E_arr_disp = _sum('E_arr_disp'); E_deg    = _sum('E_deg')
+    E_apos_deg = _sum('E_apos_deg'); E_grid   = _sum('E_grid')
+    E_grid_base = _sum('E_grid_base')
+
+    # GHI é por m² no mesmo local → idêntico entre sub-arranjos
+    acc_GHI = resultados[0]['_acc']['GHI']
+    # Gf/Gb dependem de tilt/az → média ponderada pela potência instalada
+    wsum = P_nom_stc if P_nom_stc > 0 else 1.0
+    acc_Gf = sum(r['_acc']['Gf'] * r['_acc']['P_nom_stc'] for r in resultados) / wsum
+    acc_Gb = sum(r['_acc']['Gb'] * r['_acc']['P_nom_stc'] for r in resultados) / wsum
+
+    monthly_GHI   = resultados[0]['_acc']['monthly_GHI']
+    monthly_E_arr = _sum_list('monthly_E_arr')
+    monthly_E_grid = _sum_list('monthly_E_grid')
+    monthly_Gf = [
+        sum(r['_acc']['monthly_Gf'][i] * r['_acc']['P_nom_stc'] for r in resultados) / wsum
+        for i in range(12)
+    ]
+    hist_arr  = _sum_list('hist_arr')
+    hist_grid = _sum_list('hist_grid')
+
+    # ── Indicadores combinados ────────────────────────────────────────────────
+    FT_frontal  = acc_Gf / acc_GHI if acc_GHI > 0 else 0.0
+    FT_bifacial = acc_Gb / acc_GHI if acc_GHI > 0 else 0.0
+    ganho_bif   = ((FT_bifacial / FT_frontal - 1) * 100.0) if FT_frontal > 0 else 0.0
+    PR_pct      = (E_grid / P_nom_stc / acc_Gb * 100.0) if (P_nom_stc > 0 and acc_Gb > 0) else 0.0
+
+    loss_soil_pct = (E_soil / E_stc_pre * 100.0) if E_stc_pre > 0 else 0.0
+    loss_temp_pct = ((E_arr_noT - E_arr) / E_arr_noT * 100.0) if E_arr_noT > 0 else 0.0
+    loss_dc_pct   = ((1.0 - E_arr_noT / E_stc) * 100.0) if E_stc > 0 else 0.0
+    loss_cabo_pct = (E_cabo / E_arr * 100.0) if E_arr > 0 else 0.0
+    loss_deg_pct  = (E_deg / E_arr_disp * 100.0) if E_arr_disp > 0 else 0.0
+    loss_inv_pct  = ((E_apos_deg - E_grid) / E_apos_deg * 100.0) if E_apos_deg > 0 else 0.0
+    ft_gain_pct   = round((FT_frontal - 1) * 100, 2)
+
+    loss_chain = [
+        {'label': 'GHI horizontal',                'value': round(acc_GHI, 1),       'unit': 'kWh/m²', 'tipo': 'total'},
+        {'label': 'Transposição (plano inclinado)', 'value': ft_gain_pct,            'unit': '%',       'tipo': 'ganho' if ft_gain_pct >= 0 else 'perda'},
+        {'label': 'G frontal inclinado',           'value': round(acc_Gf, 1),        'unit': 'kWh/m²', 'tipo': 'total'},
+        {'label': 'Ganho bifacial',                'value': round(ganho_bif, 2),     'unit': '%',       'tipo': 'bifacial'},
+        {'label': 'G efetivo bifacial',            'value': round(acc_Gb, 1),        'unit': 'kWh/m²', 'tipo': 'total'},
+        {'label': 'E_Array STC (teórico)',         'value': round(E_stc_pre / 1000, 1), 'unit': 'MWh', 'tipo': 'total'},
+        {'label': 'Perdas sujidade',               'value': -round(loss_soil_pct, 2), 'unit': '%',      'tipo': 'perda'},
+        {'label': 'Perdas temperatura',            'value': -round(loss_temp_pct, 1), 'unit': '%',      'tipo': 'perda'},
+        {'label': 'Perdas DC (mismatch+LID)',      'value': -round(loss_dc_pct, 1),   'unit': '%',      'tipo': 'perda'},
+        {'label': 'E_Array DC (no MPP)',           'value': round(E_arr / 1000, 1),   'unit': 'MWh',    'tipo': 'total'},
+        {'label': 'Perdas cabo CC (ôhmica)',       'value': -round(loss_cabo_pct, 2), 'unit': '%',      'tipo': 'perda'},
+        {'label': 'Perdas degradação',             'value': -round(loss_deg_pct, 2),  'unit': '%',      'tipo': 'perda'},
+        {'label': 'E_Array disponível',            'value': round(E_apos_deg / 1000, 1), 'unit': 'MWh', 'tipo': 'total'},
+        {'label': 'Perdas inversor',               'value': -round(loss_inv_pct, 1),  'unit': '%',      'tipo': 'perda'},
+        {'label': 'E_Grid (rede)',                 'value': round(E_grid / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
+    ]
+
+    # Série de degradação combinada (parâmetros globais)
+    degr_pct = float(params.get('degradacao_anual_pct', 0.5))
+    vida     = max(1, int(params.get('vida_util_anos', 25)))
+    _fdeg = lambda ano: max(1.0 - (max(0.0, degr_pct) / 100.0) * max(ano - 0.5, 0.0), 0.0)
+    degradacao_serie = [
+        {'ano': a, 'fator_pct': round(_fdeg(a) * 100, 2),
+         'E_grid_kWh': round(E_grid_base * _fdeg(a), 1)}
+        for a in range(1, vida + 1)
+    ]
+    E_grid_media_vida = round(
+        sum(s['E_grid_kWh'] for s in degradacao_serie) / len(degradacao_serie), 1)
+
+    # ── Resumo por sub-arranjo (inclui histograma de potência/clipping) ───────
+    sub_resumo = []
+    for i, r in enumerate(resultados):
+        sub_resumo.append({
+            'idx':              i + 1,
+            'modulo_nome':      r['modulo_nome'],
+            'inversor_nome':    r['inversor_nome'],
+            'N_s':              r['N_s'],
+            'N_strings':        r['N_strings'],
+            'P_nom_stc_kWp':    r['P_nom_stc_kWp'],
+            'P_nom_AC_kW':      r['P_nom_AC_kW'],
+            'P_nom_DC_kW':      r['P_nom_DC_kW'],
+            'R_DC_AC':          r['R_DC_AC'],
+            'E_grid_anual_kWh': r['E_grid_anual_kWh'],
+            'PR_pct':           r['PR_pct'],
+            'eta_inv_max_pct':  r['eta_inv_max_pct'],
+            'hist_power_bins':  r['hist_power_bins'],
+            'hist_power_arr':   r['hist_power_arr'],
+            'hist_power_grid':  r['hist_power_grid'],
+            'input_params':     r['input_params'],
+        })
+
+    inv_resumo = '+'.join(f"{r['P_nom_AC_kW']:g}" for r in resultados) + ' kW'
+
+    return {
+        'is_plant':         True,
+        'n_inversores':     len(resultados),
+        'E_grid_anual_kWh': round(E_grid, 1),
+        'PR_pct':           round(PR_pct, 1),
+        'GHI_anual':        round(acc_GHI, 1),
+        'FT_frontal':       round(FT_frontal, 4),
+        'FT_bifacial':      round(FT_bifacial, 4),
+        'ganho_bif_pct':    round(ganho_bif, 2),
+        'P_nom_stc_kWp':    round(P_nom_stc, 3),
+        'P_nom_AC_kW':      round(P_nom_AC, 1),
+        'R_DC_AC':          round(P_nom_stc / P_nom_AC, 3) if P_nom_AC > 0 else 0,
+        'degradacao_anual_pct': round(degr_pct, 2),
+        'ano_operacao':     int(params.get('ano_operacao', 1)),
+        'vida_util_anos':   vida,
+        'degradacao_serie': degradacao_serie,
+        'E_grid_media_vida_kWh': E_grid_media_vida,
+        'monthly_GHI':      [round(v, 2) for v in monthly_GHI],
+        'monthly_Gf':       [round(v, 2) for v in monthly_Gf],
+        'monthly_E_arr':    [round(v, 1) for v in monthly_E_arr],
+        'monthly_E_grid':   [round(v, 1) for v in monthly_E_grid],
+        'hist_bins':        resultados[0]['hist_bins'],
+        'hist_arr':         [round(v, 1) for v in hist_arr],
+        'hist_grid':        [round(v, 1) for v in hist_grid],
+        'loss_chain':       loss_chain,
+        'modulo_nome':      f'{len(resultados)} sub-arranjos',
+        'inversor_nome':    f'{len(resultados)} inversores ({inv_resumo})',
+        'nasa_source':      resultados[0]['nasa_source'],
+        'modulo_elec':      resultados[0]['modulo_elec'],
+        'inversor_elec':    resultados[0]['inversor_elec'],
+        'subarrays':        sub_resumo,
+        'input_params':     resultados[0]['input_params'],
+    }
+
 
 def calc_ft_curve(lat: float, lon: float, tz: float,
                   tilt: float, az: float, nasa_data: dict) -> dict:

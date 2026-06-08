@@ -7,7 +7,7 @@ GET  /catalogo → lista de módulos e inversores disponíveis
 
 from js import Response, Headers, URL, fetch as js_fetch
 import json
-from motor_core import simulate_fast, calc_ft_curve, build_nasa_data, CATALOGO_MODULOS, CATALOGO_INVERSORES
+from motor_core import simulate_fast, simulate_plant, calc_ft_curve, build_nasa_data, CATALOGO_MODULOS, CATALOGO_INVERSORES
 
 _CORS = {
     "Access-Control-Allow-Origin":  "*",
@@ -126,23 +126,28 @@ async def on_fetch(request, env):
         try:
             p = {**_DEFAULTS, **{k: v for k, v in body.items() if v is not None}}
 
-            # Resolve módulo
-            mod_key = p.get("modulo", "CS7N-730TB-AG")
-            if isinstance(mod_key, str):
-                mod = CATALOGO_MODULOS.get(mod_key)
-                if mod is None:
-                    return _error(f"Módulo '{mod_key}' não encontrado. Disponíveis: {list(CATALOGO_MODULOS)}")
-            else:
-                mod = mod_key
+            def _resolve_mod(key):
+                if isinstance(key, str):
+                    m = CATALOGO_MODULOS.get(key)
+                    if m is None:
+                        raise ValueError(f"Módulo '{key}' não encontrado")
+                    return m
+                return key
 
-            # Resolve inversor
-            inv_key = p.get("inversor", "CSI-250K-T8001A-E")
-            if isinstance(inv_key, str):
-                inv = CATALOGO_INVERSORES.get(inv_key)
-                if inv is None:
-                    return _error(f"Inversor '{inv_key}' não encontrado. Disponíveis: {list(CATALOGO_INVERSORES)}")
-            else:
-                inv = inv_key
+            def _resolve_inv(key):
+                if isinstance(key, str):
+                    v = CATALOGO_INVERSORES.get(key)
+                    if v is None:
+                        raise ValueError(f"Inversor '{key}' não encontrado")
+                    return v
+                return key
+
+            # Resolve módulo/inversor do caso de sub-arranjo único
+            try:
+                mod = _resolve_mod(p.get("modulo", "CS7N-730TB-AG"))
+                inv = _resolve_inv(p.get("inversor", "CSI-250K-T8001A-E"))
+            except ValueError as ve:
+                return _error(str(ve))
 
             lat = float(p["lat"])
             lon = float(p["lon"])
@@ -182,7 +187,30 @@ async def on_fetch(request, env):
                 "nasa_data":  nasa_data,   # None → simulate_fast usa fallback SP
             }
 
-            result = simulate_fast(params)
+            # Múltiplos sub-arranjos? Resolve cada um e usa simulate_plant.
+            subarrays_in = body.get("subarrays")
+            if isinstance(subarrays_in, list) and len(subarrays_in) > 0:
+                try:
+                    subs = []
+                    for sa in subarrays_in:
+                        subs.append({
+                            "modulo":     _resolve_mod(sa.get("modulo", "CS7N-730TB-AG")),
+                            "inversor":   _resolve_inv(sa.get("inversor", "CSI-250K-T8001A-E")),
+                            "N_s":        int(sa.get("N_s", 28)),
+                            "N_strings":  int(sa.get("N_strings", 3)),
+                            "tilt":       float(sa.get("tilt", 20.8)),
+                            "az":         float(sa.get("az", 0.0)),
+                            "bifacial":   bool(sa.get("bifacial", False)),
+                            "pitch":      float(sa.get("pitch", params["pitch"])),
+                            "mod_height": float(sa.get("mod_height", params["mod_height"])),
+                        })
+                except ValueError as ve:
+                    return _error(str(ve))
+                params["subarrays"] = subs
+                result = simulate_plant(params)
+            else:
+                result = simulate_fast(params)
+            result.pop('_acc', None)   # acumuladores internos, fora do payload
             if _nasa_err:
                 result['nasa_debug'] = _nasa_err
         except Exception as exc:
