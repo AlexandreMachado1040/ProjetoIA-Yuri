@@ -1065,6 +1065,7 @@ def simulate_plant(params: dict) -> dict:
             'E_grid_anual_kWh': r['E_grid_anual_kWh'],
             'PR_pct':           r['PR_pct'],
             'eta_inv_max_pct':  r['eta_inv_max_pct'],
+            'monthly_E_grid':   r['monthly_E_grid'],
             'FT_frontal':       r['FT_frontal'],
             'FT_bifacial':      r['FT_bifacial'],
             'ganho_bif_pct':    r['ganho_bif_pct'],

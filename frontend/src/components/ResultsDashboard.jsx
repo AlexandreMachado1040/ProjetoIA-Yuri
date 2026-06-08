@@ -142,6 +142,7 @@ export default function ResultsDashboard({ resultado }) {
       <ProducaoMensalChart
         monthlyGridKwh={monthly_E_grid}
         monthlyArrKwh={monthly_E_arr}
+        subarrays={is_plant ? subarrays : null}
       />
 
       <IrradianciaChart

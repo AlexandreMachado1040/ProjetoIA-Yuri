@@ -1,11 +1,57 @@
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ReferenceLine, ResponsiveContainer, Cell,
 } from 'recharts'
 
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
 
-export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh }) {
+// Paleta para empilhar sub-arranjos
+const CORES_SA = ['#00C8FF', '#10b981', '#f59e0b', '#a855f7', '#ef4444', '#0077EE', '#14b8a6', '#eab308']
+
+export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh, subarrays }) {
+  // ── Modo planta: barras empilhadas por sub-arranjo ──────────────────────────
+  if (subarrays?.length > 0) {
+    const data = MESES.map((m, i) => {
+      const row = { mes: m, total: 0 }
+      subarrays.forEach(s => {
+        const v = +(((s.monthly_E_grid?.[i]) ?? 0) / 1000).toFixed(2)
+        row[`sa${s.idx}`] = v
+        row.total += v
+      })
+      row.total = +row.total.toFixed(2)
+      return row
+    })
+    const media = data.reduce((acc, d) => acc + d.total, 0) / 12
+
+    return (
+      <div className="chart-card">
+        <h3>Produção Mensal por Sub-arranjo (MWh — E_Grid)</h3>
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+            <XAxis dataKey="mes" />
+            <YAxis unit=" MWh" />
+            <Tooltip formatter={(v, n) => [`${v} MWh`, n]} />
+            <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
+            <ReferenceLine y={+media.toFixed(2)} stroke="#f59e0b" strokeDasharray="5 3"
+              label={{ value: `Média ${media.toFixed(2)} MWh`, position: 'right', fontSize: 11, fill: '#f59e0b' }} />
+            {subarrays.map((s, k) => (
+              <Bar
+                key={s.idx}
+                dataKey={`sa${s.idx}`}
+                name={`SA${s.idx} · ${s.inversor_nome}`}
+                stackId="sa"
+                fill={CORES_SA[k % CORES_SA.length]}
+                radius={k === subarrays.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+              />
+            ))}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    )
+  }
+
+  // ── Modo sub-arranjo único (comportamento original) ─────────────────────────
   if (!monthlyGridKwh) return null
 
   const gridMwh = monthlyGridKwh.map(v => +(v / 1000).toFixed(2))
