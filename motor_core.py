@@ -498,6 +498,16 @@ def calc_eta_inv_generico(P_array_kW: float, inv: dict) -> float:
 # 10. Simulação rápida mensal (12 dias representativos × 24 h)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Tipos de montagem → U-value térmico (PVSyst): U = Uc + Uv·vento.
+# Uc [W/m²K] (condutivo), Uv [W·s/m³K] (convecção forçada pelo vento).
+MONTAGEM_PRESETS = {
+    'livre':     {'label': 'Estrutura livre (ventilada)', 'Uc': 29.0, 'Uv': 0.0},
+    'semi':      {'label': 'Semi-integrada no telhado',   'Uc': 20.0, 'Uv': 0.0},
+    'integrada': {'label': 'Integrada / verso isolado',   'Uc': 15.0, 'Uv': 0.0},
+    'pvusa':     {'label': 'Com vento (modelo PVUSA)',    'Uc': 25.0, 'Uv': 1.2},
+}
+
+
 def simulate_fast(params: dict) -> dict:
     """
     Simulação mensal rápida usando um dia representativo por mês (±14 dias do
@@ -522,6 +532,14 @@ def simulate_fast(params: dict) -> dict:
     mod_height   float   Comprimento do módulo (dimensão no plano inclinado) [m]
     N_seg        int     Segmentos de ray-tracing (padrão 5)
     N_rays       int     Raios por segmento (padrão 36)
+    perda_cabo_cc_pct float Perda ôhmica de cabeamento CC em STC [%] (padrão 1,5)
+    perda_sujidade_pct float Perda por sujidade anual [%] (padrão 2,0)
+    perda_sujidade_mensal list (opcional) 12 valores de sujidade por mês [%]
+    tipo_montagem str    Tipo de montagem térmica (veja MONTAGEM_PRESETS):
+                         'livre' (Uc=29), 'semi' (20), 'integrada' (15), 'pvusa'
+    Uc           float   (opcional) sobrescreve coef. térmico condutivo [W/m²K]
+    Uv           float   (opcional) sobrescreve coef. de vento [W·s/m³K]
+    vento_ms     float   (opcional) vento médio para o termo Uv [m/s] (padrão 1,0)
     modulo       dict    Parâmetros do módulo (veja CATALOGO_MODULOS)
     inversor     dict    Parâmetros do inversor (veja CATALOGO_INVERSORES)
 
@@ -554,6 +572,24 @@ def simulate_fast(params: dict) -> dict:
     mod_h     = float(params.get('mod_height', 2.384))
     N_seg     = int(params.get('N_seg', 5))
     N_rays    = int(params.get('N_rays', 36))
+    perda_cabo_cc_pct = float(params.get('perda_cabo_cc_pct', 1.5))  # % em STC
+
+    # Perda por sujidade (soiling) — PVSyst trata como perda de irradiância.
+    # Aceita valor anual único OU perfil mensal de 12 valores (% por mês).
+    perda_sujidade_pct = float(params.get('perda_sujidade_pct', 2.0))
+    _soil_mensal = params.get('perda_sujidade_mensal')
+    if _soil_mensal and len(_soil_mensal) == 12:
+        soil_frac = [max(0.0, float(v)) / 100.0 for v in _soil_mensal]
+    else:
+        soil_frac = [max(0.0, perda_sujidade_pct) / 100.0] * 12
+
+    # Tipo de montagem → coeficientes térmicos U-value (PVSyst)
+    tipo_montagem = str(params.get('tipo_montagem', 'livre')).lower()
+    _preset = MONTAGEM_PRESETS.get(tipo_montagem, MONTAGEM_PRESETS['livre'])
+    Uc_term = float(params.get('Uc', _preset['Uc']))   # override opcional
+    Uv_term = float(params.get('Uv', _preset['Uv']))
+    vento_ms = float(params.get('vento_ms', 1.0))      # vento médio [m/s]
+    U_value  = max(Uc_term + Uv_term * vento_ms, 1.0)  # W/m²K (evita div/0)
 
     mod = params['modulo']
     inv = params['inversor']
@@ -567,8 +603,15 @@ def simulate_fast(params: dict) -> dict:
     eta_max   = float(inv.get('eta_max', 99.0))
     P_nom_DC  = P_nom_AC / (eta_max / 100.0)       # kW (limite DC)
 
-    # Fator de perdas DC simplificado (mismatch + ôhmica + LID + soiling frontal)
-    f_DC = 0.9320   # ≈ 1 − 0.0615 − 0.0073 − 0.0174 + 0.0033 − 0.0081 − 0.0196
+    # Fator de perdas DC achatado (mismatch + LID + soiling frontal).
+    # A perda ôhmica de cabeamento CC saiu deste lump e virou termo dedicado,
+    # dependente da potência (c_cabo_stc abaixo).
+    f_DC = 0.9320
+
+    # Perda ôhmica de cabeamento CC (modelo PVSyst): P_loss = R_w·I² → a fração
+    # de perda cresce linearmente com a corrente (≈ potência/P_nom). Definida em
+    # STC (padrão 1,5%); a média anual ponderada por energia fica em ~60% disso.
+    c_cabo_stc = perda_cabo_cc_pct / 100.0
 
     # ── Dados climatológicos NASA POWER ───────────────────────────────────────
     nasa_override = params.get('nasa_data')
@@ -598,6 +641,8 @@ def simulate_fast(params: dict) -> dict:
     acc_E_arr      = 0.0
     acc_E_stc      = 0.0   # energia teórica STC (Gb, sem perdas T nem DC)
     acc_E_arr_noT  = 0.0   # energia DC sem perda de temperatura (só f_DC)
+    acc_E_cabo     = 0.0   # energia perdida no cabeamento CC (ôhmica)
+    acc_E_soil     = 0.0   # energia perdida por sujidade (irradiância)
 
     # Histograma: bins de 100 W/m² em Gf (0-100, 100-200, ..., 900-1000, >1000)
     N_BINS = 11
@@ -625,6 +670,8 @@ def simulate_fast(params: dict) -> dict:
         day_E_arr     = 0.0
         day_E_stc     = 0.0
         day_E_arr_noT = 0.0
+        day_E_cabo    = 0.0
+        day_E_soil    = 0.0
         day_Gf        = 0.0
         day_Gb        = 0.0
         day_hist_arr  = [0.0] * N_BINS
@@ -657,31 +704,43 @@ def simulate_fast(params: dict) -> dict:
                 Gr = 0.0
                 Gb = Gf
 
-            # Modelo térmico PVSyst simplificado:
-            # T_cell = T_amb + G_front × α×(1−η_m)/Uc
-            T_cell = T_amb + Gf * 0.9 * (1 - 0.235) / 29.0
+            # Modelo térmico PVSyst (U-value): T_cell = T_amb + α·G·(1−η)/(Uc+Uv·v)
+            T_cell = T_amb + Gf * 0.9 * (1 - 0.235) / U_value
 
-            # Potência MPP do array [kW]
-            G_norm    = Gb / 1000.0
+            # Perda por sujidade (PVSyst): perda de irradiância antes do efeito FV
+            s_soil    = soil_frac[mi]
+            G_eff     = Gb * (1.0 - s_soil)
+
+            # Potência MPP do array antes da perda de cabeamento [kW]
+            G_norm    = G_eff / 1000.0
             P_mpp     = (G_norm * P_nom_stc
                          * (1 + mu_Pmpp / 100.0 * (T_cell - 25.0))
                          * f_DC)
             P_mpp     = max(P_mpp, 0.0)
 
+            # Perda ôhmica de cabeamento CC (PVSyst): P_loss = c0·P²/P_nom_stc
+            # → quadrática na potência, logo fração ∝ corrente/irradiância.
+            P_cabo    = (c_cabo_stc * P_mpp * P_mpp / P_nom_stc
+                         if P_nom_stc > 0 else 0.0)
+            P_dc      = max(P_mpp - P_cabo, 0.0)   # DC disponível na entrada do inversor
+
             # Limitação DC → AC
-            P_array   = min(P_mpp, P_nom_DC)
+            P_array   = min(P_dc, P_nom_DC)
             eta_inv   = calc_eta_inv_generico(P_array, inv)
             E_grid_h  = P_array * eta_inv   # kWh (hora completa)
 
             day_GHI    += GHI
             day_Gf     += Gf
             day_Gb     += Gb
-            day_E_arr  += P_mpp
+            day_E_arr  += P_mpp            # DC no MPP (antes do cabo)
+            day_E_cabo += P_cabo
             day_E_grid += E_grid_h
 
             # Acumuladores para diagrama de perdas
+            # E_stc pós-sujidade; a perda de sujidade é contabilizada à parte.
             day_E_stc     += max(G_norm * P_nom_stc, 0.0)
             day_E_arr_noT += max(G_norm * P_nom_stc * f_DC, 0.0)
+            day_E_soil    += max((Gb / 1000.0) * P_nom_stc * s_soil, 0.0)
 
             # Histograma por bin de Gf (100 W/m² por bin)
             b = min(int(Gf // 100), N_BINS - 1) if Gf > 0 else 0
@@ -704,6 +763,8 @@ def simulate_fast(params: dict) -> dict:
         acc_Gb         += (day_Gb / 1000.0) * n_days
         acc_E_stc      += day_E_stc      * n_days
         acc_E_arr_noT  += day_E_arr_noT  * n_days
+        acc_E_cabo     += day_E_cabo     * n_days
+        acc_E_soil     += day_E_soil     * n_days
         for b in range(N_BINS):
             hist_arr_acc[b]  += day_hist_arr[b]  * n_days
             hist_grid_acc[b] += day_hist_grid[b] * n_days
@@ -729,8 +790,16 @@ def simulate_fast(params: dict) -> dict:
     loss_temp_pct = ((acc_E_arr_noT - acc_E_arr) / acc_E_arr_noT * 100.0
                      if acc_E_arr_noT > 0 else 0.0)
     loss_dc_pct   = (1.0 - f_DC) * 100.0
-    loss_inv_pct  = ((acc_E_arr - acc_E_grid) / acc_E_arr * 100.0
+    # Perda por sujidade: % de irradiância (ponderada por energia) sobre o STC
+    E_stc_pre     = acc_E_stc + acc_E_soil   # STC nominal antes da sujidade
+    loss_soil_pct = (acc_E_soil / E_stc_pre * 100.0
+                     if E_stc_pre > 0 else 0.0)
+    # Perda de cabo CC: % de energia (ponderada) sobre a DC no MPP antes do cabo
+    loss_cabo_pct = (acc_E_cabo / acc_E_arr * 100.0
                      if acc_E_arr > 0 else 0.0)
+    E_arr_disp    = acc_E_arr - acc_E_cabo   # DC disponível na entrada do inversor
+    loss_inv_pct  = ((E_arr_disp - acc_E_grid) / E_arr_disp * 100.0
+                     if E_arr_disp > 0 else 0.0)
 
     ft_gain_pct = round((FT_frontal - 1) * 100, 2)
     loss_chain = [
@@ -739,10 +808,13 @@ def simulate_fast(params: dict) -> dict:
         {'label': 'G frontal inclinado',                   'value': round(acc_Gf, 1),            'unit': 'kWh/m²', 'tipo': 'total'},
         {'label': 'Ganho bifacial',                        'value': round(ganho_bif, 2),         'unit': '%',       'tipo': 'bifacial'},
         {'label': 'G efetivo bifacial',                    'value': round(acc_Gb, 1),            'unit': 'kWh/m²', 'tipo': 'total'},
-        {'label': 'E_Array STC (teórico)',                 'value': round(acc_E_stc / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
+        {'label': 'E_Array STC (teórico)',                 'value': round(E_stc_pre / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
+        {'label': f'Perdas sujidade ({perda_sujidade_pct:g}%)', 'value': -round(loss_soil_pct, 2), 'unit': '%', 'tipo': 'perda'},
         {'label': 'Perdas temperatura',                    'value': -round(loss_temp_pct, 1),    'unit': '%',       'tipo': 'perda'},
-        {'label': 'Perdas DC (mismatch+LID+ohm+soiling)', 'value': -round(loss_dc_pct, 1),      'unit': '%',       'tipo': 'perda'},
-        {'label': 'E_Array DC',                            'value': round(acc_E_arr / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
+        {'label': 'Perdas DC (mismatch+LID)',              'value': -round(loss_dc_pct, 1),      'unit': '%',       'tipo': 'perda'},
+        {'label': 'E_Array DC (no MPP)',                   'value': round(acc_E_arr / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
+        {'label': f'Perdas cabo CC (ôhmica, {perda_cabo_cc_pct:g}% STC)', 'value': -round(loss_cabo_pct, 2), 'unit': '%', 'tipo': 'perda'},
+        {'label': 'E_Array disponível',                    'value': round(E_arr_disp / 1000, 1), 'unit': 'MWh',    'tipo': 'total'},
         {'label': 'Perdas inversor',                       'value': -round(loss_inv_pct, 1),     'unit': '%',       'tipo': 'perda'},
         {'label': 'E_Grid (rede)',                         'value': round(acc_E_grid / 1000, 1), 'unit': 'MWh',    'tipo': 'total'},
     ]
@@ -756,6 +828,15 @@ def simulate_fast(params: dict) -> dict:
         'ganho_bif_pct':    round(ganho_bif, 2),
         'P_nom_stc_kWp':    round(P_nom_stc, 3),
         'P_nom_AC_kW':      round(P_nom_AC, 1),
+        'perda_cabo_cc_pct_stc': round(perda_cabo_cc_pct, 2),
+        'loss_cabo_cc_pct':      round(loss_cabo_pct, 2),
+        'perda_sujidade_pct':    round(perda_sujidade_pct, 2),
+        'loss_sujidade_pct':     round(loss_soil_pct, 2),
+        'tipo_montagem':         tipo_montagem,
+        'montagem_label':        _preset['label'],
+        'U_value':               round(U_value, 1),
+        'Uc':                    round(Uc_term, 1),
+        'Uv':                    round(Uv_term, 2),
         'monthly_GHI':      [round(v, 2) for v in monthly_GHI],
         'monthly_Gf':       [round(v, 2) for v in monthly_Gf],
         'monthly_E_arr':    [round(v, 1) for v in monthly_E_arr],

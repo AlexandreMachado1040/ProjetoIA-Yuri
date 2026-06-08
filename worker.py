@@ -21,7 +21,8 @@ _DEFAULTS = dict(
     N_s=28, N_strings=3,
     bifacial=True,
     albedo=0.30, pitch=2.826, mod_height=2.0,
-    N_seg=5, N_rays=12,
+    N_seg=5, N_rays=12, perda_cabo_cc_pct=1.5, perda_sujidade_pct=2.0,
+    tipo_montagem="livre",
     modulo="CS7N-730TB-AG",
     inversor="CSI-250K-T8001A-E",
 )
@@ -167,6 +168,11 @@ async def on_fetch(request, env):
                 "mod_height": float(p["mod_height"]),
                 "N_seg":      min(int(p.get("N_seg", 5)),  15),
                 "N_rays":     min(int(p.get("N_rays", 12)), 90),
+                "perda_cabo_cc_pct": max(0.0, min(float(p.get("perda_cabo_cc_pct", 1.5)), 10.0)),
+                "perda_sujidade_pct": max(0.0, min(float(p.get("perda_sujidade_pct", 2.0)), 25.0)),
+                "perda_sujidade_mensal": p.get("perda_sujidade_mensal"),
+                "tipo_montagem": str(p.get("tipo_montagem", "livre")),
+                "vento_ms":   float(p.get("vento_ms", 1.0)),
                 "modulo":     mod,
                 "inversor":   inv,
                 "nasa_data":  nasa_data,   # None → simulate_fast usa fallback SP

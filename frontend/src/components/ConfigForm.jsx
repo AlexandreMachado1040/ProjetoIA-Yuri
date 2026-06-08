@@ -13,9 +13,20 @@ const DEFAULTS = {
   pitch:      2.826,
   mod_height: 2.0,
   albedo:     0.30,
+  perda_cabo_cc_pct: 1.5,
+  perda_sujidade_pct: 2.0,
+  tipo_montagem: 'livre',
   modulo:     '',
   inversor:   '',
 }
+
+// Tipos de montagem térmica (U-value PVSyst) — espelha MONTAGEM_PRESETS do motor.
+const MONTAGENS = [
+  { id: 'livre',     label: 'Estrutura livre (ventilada) — Uc 29' },
+  { id: 'semi',      label: 'Semi-integrada no telhado — Uc 20' },
+  { id: 'integrada', label: 'Integrada / verso isolado — Uc 15' },
+  { id: 'pvusa',     label: 'Com vento (PVUSA) — Uc 25, Uv 1,2' },
+]
 
 export default function ConfigForm({ onSubmit, loading }) {
   const [modulos,    setModulos]    = useState([])
@@ -71,6 +82,9 @@ export default function ConfigForm({ onSubmit, loading }) {
       mod_height: form.mod_height,
       N_seg:      form.bifacial ? 5 : 0,
       N_rays:     form.bifacial ? 12 : 0,
+      perda_cabo_cc_pct: form.perda_cabo_cc_pct,
+      perda_sujidade_pct: form.perda_sujidade_pct,
+      tipo_montagem: form.tipo_montagem,
       modulo:     form.modulo,
       inversor:   form.inversor,
     })
@@ -176,6 +190,20 @@ export default function ConfigForm({ onSubmit, loading }) {
             <option value="MONOFACIAL">Monofacial</option>
           </select>
         </label>
+      </section>
+
+      <section>
+        <h3>Perdas</h3>
+        <label className="field">
+          <span>Tipo de montagem (térmica)</span>
+          <select value={form.tipo_montagem} onChange={set('tipo_montagem')}>
+            {MONTAGENS.map(m => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </select>
+        </label>
+        {field('Perda de cabo CC (% em STC)', 'perda_cabo_cc_pct', 'number', 0.1)}
+        {field('Perda por sujidade (% anual)', 'perda_sujidade_pct', 'number', 0.1)}
       </section>
 
       {form.bifacial && (
