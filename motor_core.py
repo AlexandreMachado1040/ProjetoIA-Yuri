@@ -646,6 +646,7 @@ def simulate_fast(params: dict) -> dict:
     monthly_Gf     = [0.0] * 12
     monthly_E_grid = [0.0] * 12
     monthly_E_arr  = [0.0] * 12
+    hourly_egrid_month = [[0.0] * 24 for _ in range(12)]  # perfil horário do dia representativo
     acc_Gf         = 0.0
     acc_Gb         = 0.0
     acc_GHI        = 0.0
@@ -746,6 +747,8 @@ def simulate_fast(params: dict) -> dict:
             P_array   = min(P_dc, P_nom_DC)
             eta_inv   = calc_eta_inv_generico(P_array, inv)
             E_grid_h  = P_array * eta_inv   # kWh (hora completa)
+
+            hourly_egrid_month[mi][hour] = round(E_grid_h, 3)  # perfil horário (dia repr.)
 
             day_GHI    += GHI
             day_Gf     += Gf
@@ -883,6 +886,7 @@ def simulate_fast(params: dict) -> dict:
         'monthly_Gf':       [round(v, 2) for v in monthly_Gf],
         'monthly_E_arr':    [round(v, 1) for v in monthly_E_arr],
         'monthly_E_grid':   [round(v, 1) for v in monthly_E_grid],
+        'hourly_egrid_month': hourly_egrid_month,
         'hist_bins':        hist_bins,
         'hist_arr':         [round(v, 1) for v in hist_arr_acc],
         'hist_grid':        [round(v, 1) for v in hist_grid_acc],
@@ -935,6 +939,7 @@ def simulate_fast(params: dict) -> dict:
             'monthly_GHI': monthly_GHI, 'monthly_Gf': monthly_Gf,
             'monthly_E_arr': monthly_E_arr, 'monthly_E_grid': monthly_E_grid,
             'hist_arr': list(hist_arr_acc), 'hist_grid': list(hist_grid_acc),
+            'hourly_egrid_month': hourly_egrid_month,
             'E_grid_base': E_grid_base,
         },
     }
@@ -1004,6 +1009,12 @@ def simulate_plant(params: dict) -> dict:
     ]
     hist_arr  = _sum_list('hist_arr')
     hist_grid = _sum_list('hist_grid')
+    # Perfil horário do E_Grid (12 meses × 24 h): soma entre sub-arranjos
+    hourly_egrid_month = [
+        [round(sum(r['_acc']['hourly_egrid_month'][m][h] for r in resultados), 3)
+         for h in range(24)]
+        for m in range(12)
+    ]
 
     # ── Indicadores combinados ────────────────────────────────────────────────
     FT_frontal  = acc_Gf / acc_GHI if acc_GHI > 0 else 0.0
@@ -1134,6 +1145,7 @@ def simulate_plant(params: dict) -> dict:
         'monthly_Gf':       [round(v, 2) for v in monthly_Gf],
         'monthly_E_arr':    [round(v, 1) for v in monthly_E_arr],
         'monthly_E_grid':   [round(v, 1) for v in monthly_E_grid],
+        'hourly_egrid_month': hourly_egrid_month,
         'hist_bins':        resultados[0]['hist_bins'],
         'hist_arr':         [round(v, 1) for v in hist_arr],
         'hist_grid':        [round(v, 1) for v in hist_grid],

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ProducaoMensalChart   from './ProducaoMensalChart'
 import IrradianciaChart      from './IrradianciaChart'
+import HourlyEgridChart      from './HourlyEgridChart'
 import LossDiagram           from './LossDiagram'
 import IVCurveChart          from './IVCurveChart'
 import PowerHistogramChart   from './PowerHistogramChart'
@@ -19,6 +20,7 @@ export default function ResultsDashboard({ resultado }) {
     FT_frontal, FT_bifacial, ganho_bif_pct,
     P_nom_stc_kWp, P_nom_AC_kW,
     monthly_GHI, monthly_Gf, monthly_E_arr, monthly_E_grid,
+    hourly_egrid_month,
     loss_chain, modulo_nome, inversor_nome, nasa_source,
     input_params, is_plant, subarrays,
   } = resultado
@@ -151,6 +153,8 @@ export default function ResultsDashboard({ resultado }) {
         monthlyGf={monthly_Gf}
         bifacial={bifacial}
       />
+
+      <HourlyEgridChart hourlyEgridMonth={hourly_egrid_month} />
 
       {!is_plant && <PowerHistogramChart resultado={resultado} />}
 
