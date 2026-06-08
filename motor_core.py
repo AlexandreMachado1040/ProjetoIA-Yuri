@@ -1078,6 +1078,32 @@ def simulate_plant(params: dict) -> dict:
 
     inv_resumo = '+'.join(f"{r['P_nom_AC_kW']:g}" for r in resultados) + ' kW'
 
+    # ── Histograma de potência agregado da usina ──────────────────────────────
+    # Re-bina cada histograma de sub-arranjo (escala kW própria) num eixo comum
+    # 0 → P_nom_stc total, somando a energia por bin (atribuição pelo centro do
+    # bin de origem; os bins de sub-arranjo são mais estreitos que os comuns).
+    N_PB = 20
+    W_pb = P_nom_stc / N_PB if P_nom_stc > 0 else 1.0
+    comb_arr  = [0.0] * (N_PB + 1)
+    comb_grid = [0.0] * (N_PB + 1)
+    for r in resultados:
+        bins = r['hist_power_bins']           # kW (len N+2)
+        ha   = r['hist_power_arr']            # MWh (len N+1)
+        hg   = r['hist_power_grid']
+        for j in range(len(ha)):
+            if ha[j] == 0 and hg[j] == 0:
+                continue
+            lo = bins[j]
+            hi = bins[j + 1] if (j + 1) < len(bins) else lo
+            centro = (lo + hi) / 2.0
+            k = min(int(centro / W_pb), N_PB) if W_pb > 0 else 0
+            comb_arr[k]  += ha[j]
+            comb_grid[k] += hg[j]
+    hist_power_bins = [round(i * W_pb, 2) for i in range(N_PB + 2)]
+    P_nom_DC_total  = sum(r['P_nom_DC_kW'] for r in resultados)
+    eta_max_pond    = (sum(r['eta_inv_max_pct'] * r['P_nom_AC_kW'] for r in resultados) / P_nom_AC
+                       if P_nom_AC > 0 else 0.0)
+
     return {
         'is_plant':         True,
         'n_inversores':     len(resultados),
@@ -1090,6 +1116,11 @@ def simulate_plant(params: dict) -> dict:
         'P_nom_stc_kWp':    round(P_nom_stc, 3),
         'P_nom_AC_kW':      round(P_nom_AC, 1),
         'R_DC_AC':          round(P_nom_stc / P_nom_AC, 3) if P_nom_AC > 0 else 0,
+        'P_nom_DC_kW':      round(P_nom_DC_total, 2),
+        'eta_inv_max_pct':  round(eta_max_pond, 2),
+        'hist_power_bins':  hist_power_bins,
+        'hist_power_arr':   [round(v, 3) for v in comb_arr],
+        'hist_power_grid':  [round(v, 3) for v in comb_grid],
         'degradacao_anual_pct': round(degr_pct, 2),
         'ano_operacao':     int(params.get('ano_operacao', 1)),
         'vida_util_anos':   vida,

@@ -89,6 +89,15 @@ export default function ResultsDashboard({ resultado }) {
         </div>
       )}
 
+      {is_plant && (
+        <>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-sub)', margin: '8px 2px 4px' }}>
+            Usina — distribuição de saída agregada (soma dos inversores)
+          </p>
+          <PowerHistogramChart resultado={resultado} />
+        </>
+      )}
+
       {is_plant && subarrays?.map(s => {
         const colapsado = !!recolhidos[s.idx]
         return (
@@ -141,7 +150,7 @@ export default function ResultsDashboard({ resultado }) {
         bifacial={bifacial}
       />
 
-      <PowerHistogramChart resultado={resultado} />
+      {!is_plant && <PowerHistogramChart resultado={resultado} />}
 
       {!is_plant && <FTCurveChart inputParams={input_params} resultado={resultado} />}
     </div>
