@@ -88,6 +88,25 @@ export async function submitSimulacao(payload, tentativas = 5) {
   throw ultimoErro
 }
 
+// Análise diária (365 dias) — endpoint mais pesado, timeout maior + retry.
+export async function getDailyAnalysis(payload, tentativas = 3) {
+  let ultimoErro
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      const r = await api.post('/daily', payload, { timeout: 60000 })
+      return r.data
+    } catch (e) {
+      ultimoErro = e
+      if (i < tentativas - 1 && devoRepetir(e)) {
+        await sleep(_BACKOFF_MS[Math.min(i, _BACKOFF_MS.length - 1)])
+        continue
+      }
+      throw e
+    }
+  }
+  throw ultimoErro
+}
+
 // Aquece o Worker em segundo plano (dispara cold start cedo). Chamado quando o
 // app carrega, para que o motor já esteja quente quando o usuário clicar Simular.
 export function prewarm() {

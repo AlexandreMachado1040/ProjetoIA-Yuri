@@ -1160,6 +1160,146 @@ def simulate_plant(params: dict) -> dict:
     }
 
 
+def _month_of_doy(doy: int) -> int:
+    """Índice do mês (0-11) para um dia do ano (1-365)."""
+    for mi in range(11, -1, -1):
+        if doy >= MONTH_START_DAY[mi]:
+            return mi
+    return 0
+
+
+def _interp_daily(monthly_vals: list) -> list:
+    """Interpola 12 valores mensais (no meio de cada mês) para 365 diários,
+    de forma cíclica (linear entre os meios dos meses)."""
+    mids = [MONTH_START_DAY[mi] + DAYS_PER_MONTH[mi] / 2.0 for mi in range(12)]
+    daily = []
+    for doy in range(1, 366):
+        # acha o intervalo [mids[a], mids[b]] que contém doy (cíclico)
+        if doy <= mids[0]:
+            a, b = 11, 0
+            d_prev = mids[11] - 365.0
+            frac = (doy - d_prev) / (mids[0] - d_prev)
+        elif doy >= mids[11]:
+            a, b = 11, 0
+            d_next = mids[0] + 365.0
+            frac = (doy - mids[11]) / (d_next - mids[11])
+        else:
+            a = max(i for i in range(12) if mids[i] <= doy)
+            b = a + 1
+            frac = (doy - mids[a]) / (mids[b] - mids[a])
+        daily.append(monthly_vals[a] + (monthly_vals[b] - monthly_vals[a]) * frac)
+    return daily
+
+
+def _daily_series_one(p: dict) -> tuple:
+    """Série diária (365) e horária (365×24) de E_Grid para UM sub-arranjo.
+    Bifacial: aplica o ganho traseiro médio por mês (12 ray-tracings) a cada dia,
+    evitando o custo de ray-tracing diário."""
+    lat = float(p['lat']); lon = float(p['lon']); tz = float(p.get('tz', -3))
+    tilt = float(p.get('tilt', 20)); az_panel = float(p.get('az', 0))
+    N_s = int(p.get('N_s', 28)); N_strings = int(p.get('N_strings', 1))
+    bifacial = bool(p.get('bifacial', True)); albedo = float(p.get('albedo', 0.25))
+    pitch = float(p.get('pitch', 10.0)); mod_h = float(p.get('mod_height', 2.384))
+    N_seg = int(p.get('N_seg', 5)); N_rays = int(p.get('N_rays', 36))
+    mod = p['modulo']; inv = p['inversor']
+    Pmpp = float(mod['Pmpp']); mu_Pmpp = float(mod['mu_Pmpp']); phi = float(mod.get('phi', 0.0))
+
+    P_nom_stc = N_s * N_strings * Pmpp / 1000.0
+    P_nom_AC = float(inv['P_nomAC']); eta_max = float(inv.get('eta_max', 99.0))
+    P_nom_DC = P_nom_AC / (eta_max / 100.0)
+    f_DC = 0.9320
+    c_cabo_stc = float(p.get('perda_cabo_cc_pct', 1.5)) / 100.0
+
+    perda_suj = float(p.get('perda_sujidade_pct', 2.0))
+    _sm = p.get('perda_sujidade_mensal')
+    soil_frac = ([max(0.0, float(v)) / 100.0 for v in _sm] if _sm and len(_sm) == 12
+                 else [max(0.0, perda_suj) / 100.0] * 12)
+
+    tipo = str(p.get('tipo_montagem', 'livre')).lower()
+    preset = MONTAGEM_PRESETS.get(tipo, MONTAGEM_PRESETS['livre'])
+    Uc = float(p.get('Uc', preset['Uc'])); Uv = float(p.get('Uv', preset['Uv']))
+    vento = float(p.get('vento_ms', 1.0)); U_value = max(Uc + Uv * vento, 1.0)
+
+    degr = float(p.get('degradacao_anual_pct', 0.5)); ano_op = max(1, int(p.get('ano_operacao', 1)))
+    fator_deg = max(1.0 - (max(0.0, degr) / 100.0) * max(ano_op - 0.5, 0.0), 0.0)
+
+    nasa = p['nasa_data'] if p.get('nasa_data') else build_nasa_data(lat, lon)
+    NASA_GHI = nasa['ghi']; NASA_T2M = nasa['t2m']
+
+    # Ganho bifacial médio por mês (12 ray-tracings no dia representativo)
+    bif_factor = [1.0] * 12
+    if bifacial and phi > 0:
+        for mi in range(12):
+            doy = min(MONTH_START_DAY[mi] + 14, 365)
+            dGHI = NASA_GHI.get(mi + 1, 5.0); Kd = calc_daily_kd(doy, dGHI, lat)
+            sGf = sGb = 0.0
+            for hour in range(24):
+                GHI, DNI, DHI, HSun, AzSun, ENI = calc_ghi_hourly(doy, hour, dGHI, Kd, lat, lon, tz)
+                if GHI < 1.0 or HSun <= 2:
+                    continue
+                Gf, _ = calc_ft_frontal(HSun, AzSun, GHI, DNI, DHI, ENI, albedo, tilt, az_panel)
+                Gr = calc_rear_raytracing(HSun, AzSun, GHI, DNI, DHI, tilt, mod_h, pitch, albedo, N_seg, N_rays)
+                sGf += Gf; sGb += Gf + phi * Gr
+            bif_factor[mi] = (sGb / sGf) if sGf > 0 else 1.0
+
+    # Climatologia interpolada para diário
+    ghi_daily = _interp_daily([NASA_GHI.get(m, 5.0) for m in range(1, 13)])
+    t_daily   = _interp_daily([NASA_T2M.get(m, 22.0) for m in range(1, 13)])
+
+    daily_egrid = [0.0] * 365
+    daily_hourly = [[0.0] * 24 for _ in range(365)]
+    for di in range(365):
+        doy = di + 1
+        mi = _month_of_doy(doy)
+        dGHI = ghi_daily[di]; T_amb = t_daily[di]
+        Kd = calc_daily_kd(doy, dGHI, lat)
+        bf = bif_factor[mi]; s_soil = soil_frac[mi]
+        tot = 0.0
+        for hour in range(24):
+            GHI, DNI, DHI, HSun, AzSun, ENI = calc_ghi_hourly(doy, hour, dGHI, Kd, lat, lon, tz)
+            if GHI < 1.0 or HSun <= 2:
+                continue
+            Gf, _ = calc_ft_frontal(HSun, AzSun, GHI, DNI, DHI, ENI, albedo, tilt, az_panel)
+            Gb = Gf * bf
+            T_cell = T_amb + Gf * 0.9 * (1 - 0.235) / U_value
+            G_norm = (Gb * (1.0 - s_soil)) / 1000.0
+            P_mpp = max(G_norm * P_nom_stc * (1 + mu_Pmpp / 100.0 * (T_cell - 25.0)) * f_DC, 0.0)
+            P_cabo = (c_cabo_stc * P_mpp * P_mpp / P_nom_stc) if P_nom_stc > 0 else 0.0
+            P_dc = max(P_mpp - P_cabo, 0.0) * fator_deg
+            P_array = min(P_dc, P_nom_DC)
+            E_grid_h = P_array * calc_eta_inv_generico(P_array, inv)
+            daily_hourly[di][hour] = E_grid_h
+            tot += E_grid_h
+        daily_egrid[di] = tot
+    return daily_egrid, daily_hourly
+
+
+def simulate_daily(params: dict) -> dict:
+    """Análise diária: E_Grid total de cada dia do ano (365) + perfil horário de
+    cada dia (365×24). Soma sub-arranjos quando há lista 'subarrays'."""
+    if params.get('subarrays'):
+        shared_keys = ('lat', 'lon', 'tz', 'nasa_data', 'N_seg', 'N_rays', 'albedo',
+                       'vento_ms', 'perda_cabo_cc_pct', 'perda_sujidade_pct',
+                       'perda_sujidade_mensal', 'tipo_montagem', 'Uc', 'Uv',
+                       'degradacao_anual_pct', 'ano_operacao')
+        shared = {k: params[k] for k in shared_keys if k in params}
+        d_egrid = [0.0] * 365
+        d_hourly = [[0.0] * 24 for _ in range(365)]
+        for sa in params['subarrays']:
+            de, dh = _daily_series_one({**shared, **sa})
+            for i in range(365):
+                d_egrid[i] += de[i]
+                for h in range(24):
+                    d_hourly[i][h] += dh[i][h]
+    else:
+        d_egrid, d_hourly = _daily_series_one(params)
+
+    return {
+        'daily_egrid':  [round(v, 2) for v in d_egrid],
+        'daily_hourly': [[round(v, 2) for v in dia] for dia in d_hourly],
+    }
+
+
 def calc_ft_curve(lat: float, lon: float, tz: float,
                   tilt: float, az: float, nasa_data: dict) -> dict:
     """

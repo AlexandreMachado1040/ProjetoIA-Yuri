@@ -9,6 +9,7 @@ const APP_VERSION = 'v3.0'
 
 export default function App() {
   const [resultado, setResultado] = useState(null)
+  const [payloadAtual, setPayloadAtual] = useState(null)
   const [loading, setLoading]     = useState(false)
   const [erro, setErro]           = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -24,6 +25,7 @@ export default function App() {
       const data = await submitSimulacao(payload)
       if (data.error) throw new Error(data.error)
       setResultado(data)
+      setPayloadAtual(payload)
       setSidebarOpen(false)
     } catch (e) {
       const semResposta = !e?.response
@@ -78,7 +80,7 @@ export default function App() {
               <p>Simulando… aguarde.</p>
             </div>
           )}
-          {resultado && <ResultsDashboard resultado={resultado} />}
+          {resultado && <ResultsDashboard resultado={resultado} inputPayload={payloadAtual} />}
           {!resultado && !loading && !erro && (
             <div className="empty-state">
               <p>Preencha os parâmetros e clique em <strong>Simular</strong> para iniciar.</p>

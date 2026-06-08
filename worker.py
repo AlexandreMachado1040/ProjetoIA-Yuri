@@ -7,7 +7,7 @@ GET  /catalogo → lista de módulos e inversores disponíveis
 
 from js import Response, Headers, URL, fetch as js_fetch
 import json
-from motor_core import simulate_fast, simulate_plant, calc_ft_curve, build_nasa_data, CATALOGO_MODULOS, CATALOGO_INVERSORES
+from motor_core import simulate_fast, simulate_plant, simulate_daily, calc_ft_curve, build_nasa_data, CATALOGO_MODULOS, CATALOGO_INVERSORES
 
 _CORS = {
     "Access-Control-Allow-Origin":  "*",
@@ -115,8 +115,8 @@ async def on_fetch(request, env):
         }
         return _json_response(catalogo)
 
-    # POST /simulate
-    if method == "POST" and path in ("/simulate", "/"):
+    # POST /simulate | /daily
+    if method == "POST" and path in ("/simulate", "/daily", "/"):
         try:
             raw_text = await request.text()
             body = json.loads(raw_text)
@@ -207,6 +207,11 @@ async def on_fetch(request, env):
                 except ValueError as ve:
                     return _error(str(ve))
                 params["subarrays"] = subs
+
+            # Rota /daily → análise diária (365 dias); senão simulação padrão
+            if path == "/daily":
+                result = simulate_daily(params)
+            elif params.get("subarrays"):
                 result = simulate_plant(params)
             else:
                 result = simulate_fast(params)
