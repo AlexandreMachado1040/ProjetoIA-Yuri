@@ -1,12 +1,17 @@
+import { useState } from 'react'
 import ProducaoMensalChart   from './ProducaoMensalChart'
 import IrradianciaChart      from './IrradianciaChart'
-import HistogramaChart       from './HistogramaChart'
 import LossDiagram           from './LossDiagram'
 import IVCurveChart          from './IVCurveChart'
 import PowerHistogramChart   from './PowerHistogramChart'
 import FTCurveChart          from './FTCurveChart'
 
 export default function ResultsDashboard({ resultado }) {
+  // Sub-arranjos recolhidos (por idx). Padrão: todos expandidos.
+  const [recolhidos, setRecolhidos] = useState({})
+  const toggleSub = (idx) =>
+    setRecolhidos(r => ({ ...r, [idx]: !r[idx] }))
+
   if (!resultado) return null
 
   const {
@@ -14,7 +19,6 @@ export default function ResultsDashboard({ resultado }) {
     FT_frontal, FT_bifacial, ganho_bif_pct,
     P_nom_stc_kWp, P_nom_AC_kW,
     monthly_GHI, monthly_Gf, monthly_E_arr, monthly_E_grid,
-    hist_bins, hist_arr, hist_grid,
     loss_chain, modulo_nome, inversor_nome, nasa_source,
     input_params, is_plant, subarrays,
   } = resultado
@@ -85,17 +89,43 @@ export default function ResultsDashboard({ resultado }) {
         </div>
       )}
 
-      {is_plant && subarrays?.map(s => (
-        <div key={s.idx}>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-sub)', margin: '8px 2px 4px' }}>
-            Sub-arranjo {s.idx} — {s.inversor_nome} · {s.modulo_nome}
-            {s.input_params && ` · ${s.input_params.tilt}° incl. / ${s.input_params.az}° az.`}
-          </p>
-          <IVCurveChart resultado={s} />
-          <PowerHistogramChart resultado={s} />
-          <FTCurveChart inputParams={s.input_params} resultado={s} />
-        </div>
-      ))}
+      {is_plant && subarrays?.map(s => {
+        const colapsado = !!recolhidos[s.idx]
+        return (
+          <div key={s.idx} style={{ marginBottom: 8 }}>
+            <button
+              type="button"
+              onClick={() => toggleSub(s.idx)}
+              aria-expanded={!colapsado}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                background: 'rgba(0,95,255,0.10)', border: '1px solid rgba(0,95,255,0.25)',
+                borderRadius: 7, padding: '8px 12px', margin: '8px 0 6px',
+                color: 'var(--text-sub)', fontSize: '0.82rem', cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <span style={{
+                display: 'inline-block', transition: 'transform 0.15s',
+                transform: colapsado ? 'rotate(-90deg)' : 'rotate(0deg)',
+              }}>▾</span>
+              <strong style={{ color: 'var(--text-main, #e2e8f0)' }}>Sub-arranjo {s.idx}</strong>
+              <span>— {s.inversor_nome} · {s.modulo_nome}
+                {s.input_params && ` · ${s.input_params.tilt}° incl. / ${s.input_params.az}° az.`}</span>
+              <span style={{ marginLeft: 'auto', fontSize: '0.74rem', opacity: 0.7 }}>
+                {colapsado ? 'expandir' : 'recolher'}
+              </span>
+            </button>
+            {!colapsado && (
+              <>
+                <IVCurveChart resultado={s} />
+                <PowerHistogramChart resultado={s} />
+                <FTCurveChart inputParams={s.input_params} resultado={s} />
+              </>
+            )}
+          </div>
+        )
+      })}
 
       {/* No modo planta, a curva I-V do topo não renderiza (N_s é por sub-arranjo) */}
       {!is_plant && <IVCurveChart resultado={resultado} />}
@@ -112,12 +142,6 @@ export default function ResultsDashboard({ resultado }) {
       />
 
       <PowerHistogramChart resultado={resultado} />
-
-      <HistogramaChart
-        bins={hist_bins}
-        histArr={hist_arr}
-        histGrid={hist_grid}
-      />
 
       {!is_plant && <FTCurveChart inputParams={input_params} resultado={resultado} />}
     </div>

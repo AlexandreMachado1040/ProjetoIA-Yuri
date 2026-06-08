@@ -4,6 +4,9 @@ import ResultsDashboard from './components/ResultsDashboard'
 import { submitSimulacao, prewarm } from './api/client'
 import './App.css'
 
+// Versão da aplicação (exibida no cabeçalho). Atualizar a cada release.
+const APP_VERSION = 'v3.0'
+
 export default function App() {
   const [resultado, setResultado] = useState(null)
   const [loading, setLoading]     = useState(false)
@@ -51,7 +54,7 @@ export default function App() {
             <circle cx="100" cy="134" r="11" fill="url(#hg1)"/>
           </svg>
           <div className="header-text">
-            <h1>Aurova <span>Motor Solar v2.3</span></h1>
+            <h1>Aurova <span>Motor Solar {APP_VERSION}</span></h1>
             <p>Simulação fotovoltaica bifacial com Ray-Tracing 2D</p>
           </div>
         </div>
