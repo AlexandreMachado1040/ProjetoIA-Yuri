@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { exportarCSV, exportarPNGs, imprimirPDF } from '../utils/exportRelatorio'
+import { exportarCSV, exportarPNGs } from '../utils/exportRelatorio'
+import RelatorioPDF          from './RelatorioPDF'
 import ProducaoMensalChart   from './ProducaoMensalChart'
 import IrradianciaChart      from './IrradianciaChart'
 import DailyEgridChart       from './DailyEgridChart'
@@ -20,6 +21,9 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
     setExportandoPng(true)
     try { await exportarPNGs() } finally { setExportandoPng(false) }
   }
+
+  // Pré-visualização do relatório em documento (PDF via impressão).
+  const [mostrarRelatorio, setMostrarRelatorio] = useState(false)
 
   if (!resultado) return null
 
@@ -52,11 +56,19 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
           <button type="button" onClick={handlePng} disabled={exportandoPng} title="Baixar cada gráfico como imagem PNG">
             {exportandoPng ? '…' : '🖼 PNG'}
           </button>
-          <button type="button" onClick={imprimirPDF} title="Salvar relatório em PDF (diálogo de impressão)">
-            🖨 PDF
+          <button type="button" onClick={() => setMostrarRelatorio(true)} title="Abrir relatório profissional (salvar em PDF)">
+            📄 Relatório
           </button>
         </div>
       </div>
+
+      {mostrarRelatorio && (
+        <RelatorioPDF
+          resultado={resultado}
+          inputPayload={inputPayload}
+          onClose={() => setMostrarRelatorio(false)}
+        />
+      )}
 
       <div className="kpi-grid">
         <KPI label="E_Grid Anual"   value={E_grid_MWh}           unit="MWh/ano" color="blue" />

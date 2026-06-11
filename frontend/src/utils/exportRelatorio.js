@@ -209,9 +209,3 @@ export async function exportarPNGs() {
   return n
 }
 
-// ── PDF ─────────────────────────────────────────────────────────────────────
-// Usa o diálogo de impressão do navegador ("Salvar como PDF"); o layout de
-// impressão é controlado pelo @media print do App.css.
-export function imprimirPDF() {
-  window.print()
-}
