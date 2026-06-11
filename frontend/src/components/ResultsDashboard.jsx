@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { exportarCSV, exportarPNGs, imprimirPDF } from '../utils/exportRelatorio'
 import ProducaoMensalChart   from './ProducaoMensalChart'
 import IrradianciaChart      from './IrradianciaChart'
 import DailyEgridChart       from './DailyEgridChart'
@@ -12,6 +13,13 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
   const [recolhidos, setRecolhidos] = useState({})
   const toggleSub = (idx) =>
     setRecolhidos(r => ({ ...r, [idx]: !r[idx] }))
+
+  // Exportação de PNGs é assíncrona (um download por gráfico).
+  const [exportandoPng, setExportandoPng] = useState(false)
+  const handlePng = async () => {
+    setExportandoPng(true)
+    try { await exportarPNGs() } finally { setExportandoPng(false) }
+  }
 
   if (!resultado) return null
 
@@ -36,6 +44,17 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
         <div className="header-tags">
           {modulo_nome && <span className="fonte-tag">{modulo_nome} · {inversor_nome}</span>}
           {nasa_source  && <span className="fonte-tag nasa">{nasa_source}</span>}
+        </div>
+        <div className="export-toolbar">
+          <button type="button" onClick={() => exportarCSV(resultado, inputPayload)} title="Baixar dados em CSV (Excel)">
+            ⬇ CSV
+          </button>
+          <button type="button" onClick={handlePng} disabled={exportandoPng} title="Baixar cada gráfico como imagem PNG">
+            {exportandoPng ? '…' : '🖼 PNG'}
+          </button>
+          <button type="button" onClick={imprimirPDF} title="Salvar relatório em PDF (diálogo de impressão)">
+            🖨 PDF
+          </button>
         </div>
       </div>
 

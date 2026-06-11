@@ -257,6 +257,30 @@ body {
   background: rgba(0,170,255,0.07);
 }
 
+/* ── Barra de exportação (CSV / PNG / PDF) ── */
+.export-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.export-toolbar button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--blue-light);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+.export-toolbar button:hover:not(:disabled) { background: var(--bg-card-hover); }
+.export-toolbar button:disabled { opacity: 0.5; cursor: wait; }
+
 /* ── KPIs ── */
 .kpi-grid {
   display: grid;
@@ -545,6 +569,67 @@ body {
   }
   .loss-val {
     font-size: 0.9rem;
+  }
+}
+
+/* ── Impressão / PDF ──
+   Acionada pelo botão "PDF" (window.print). Mantém o tema escuro dos
+   gráficos (eles foram desenhados para fundo escuro) forçando a impressão
+   das cores de fundo. */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  @page { margin: 10mm; }
+
+  html, body, .app, .app-main {
+    background: #05091A !important;
+    background-image: none !important;
+  }
+
+  /* Esconde tudo que não é relatório */
+  .sidebar,
+  .btn-sidebar-toggle,
+  .export-toolbar,
+  .error-banner,
+  .empty-state,
+  .results-dashboard input[type="range"],
+  .results-dashboard button[aria-expanded] span:last-child {
+    display: none !important;
+  }
+
+  .app::before { display: none !important; }
+
+  .app-header {
+    position: static;
+    backdrop-filter: none;
+    background: #05091A !important;
+  }
+
+  .content {
+    padding: 12px 0;
+    overflow: visible;
+  }
+
+  /* Fundos sólidos (rgba sobre body pode falhar entre páginas) */
+  .chart-card, .kpi-card, .loss-panel, .progress-box {
+    background: #0b1226 !important;
+    border-color: rgba(255,255,255,0.12) !important;
+  }
+
+  /* Evita cortar cartões/gráficos entre páginas */
+  .chart-card, .kpi-grid, .loss-layout, .results-header {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Gráficos SVG escalam para a largura da página impressa */
+  .recharts-wrapper,
+  .recharts-wrapper svg {
+    max-width: 100% !important;
+    height: auto !important;
   }
 }
 
