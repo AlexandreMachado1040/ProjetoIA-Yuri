@@ -80,7 +80,9 @@ export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh, sub
           {arrMwh && (
             <Bar dataKey="arr" name={t('prod.earr')} fill="#0077EE" radius={[3,3,0,0]} />
           )}
-          <Bar dataKey="grid" name={t('prod.egrid')} radius={[3,3,0,0]}>
+          {/* fill na série dá a cor da legenda; as Cells pintam mês a mês
+              (ciano = acima da média, azul = abaixo). */}
+          <Bar dataKey="grid" name={t('prod.egrid')} radius={[3,3,0,0]} fill="#00C8FF">
             {data.map((d, i) => (
               <Cell key={i} fill={d.grid >= media ? '#00C8FF' : '#005FFF'} />
             ))}
