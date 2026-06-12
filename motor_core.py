@@ -270,6 +270,34 @@ def calc_ghi_hourly(doy: int, hour: int, daily_GHI: float,
 # 6. Transposição frontal — modelo Hay (1979)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def calc_ft_components(HSun: float, AzSun: float,
+                       GHI: float, DNI: float, DHI: float, ENI: float,
+                       albedo: float, tilt_deg: float, az_panel_deg: float):
+    """
+    Componentes da irradiância no plano inclinado pelo modelo Hay (1979).
+
+    Retorna (Eb, Ed, Eg, cos_ia):
+        Eb     : componente direta no plano [W/m²]
+        Ed     : componente difusa do céu (circunsolar + isotrópica) [W/m²]
+        Eg     : componente refletida do solo (albedo) [W/m²]
+        cos_ia : cosseno do ângulo de incidência no plano
+    """
+    if HSun <= 0.5 or GHI <= 0:
+        return 0.0, 0.0, 0.0, 0.0
+    h   = math.radians(HSun)
+    t   = math.radians(tilt_deg)
+    ar  = math.radians(AzSun - az_panel_deg)
+    cos_ia = (math.cos(ar) * math.cos(h) * math.sin(t)
+              + math.sin(h) * math.cos(t))
+    Rb   = max(cos_ia / math.sin(h), 0.0)
+    fAni = min(DNI / ENI, 1.0) if ENI > 0 else 0.0
+    Ib_H = max(GHI - DHI, 0.0)   # irradiância direta na horizontal (Hay 1979)
+    Eb   = max(Ib_H * Rb, 0.0)
+    Ed   = max(DHI * (fAni * Rb + (1 - fAni) * (1 + math.cos(t)) / 2), 0.0)
+    Eg   = max(GHI * albedo * (1 - math.cos(t)) / 2, 0.0)
+    return Eb, Ed, Eg, cos_ia
+
+
 def calc_ft_frontal(HSun: float, AzSun: float,
                     GHI: float, DNI: float, DHI: float, ENI: float,
                     albedo: float, tilt_deg: float, az_panel_deg: float):
@@ -280,23 +308,23 @@ def calc_ft_frontal(HSun: float, AzSun: float,
         Gt : irradiância total no plano [W/m²]
         FT : fator de transposição Gt/GHI (adimensional)
     """
-    if HSun <= 0.5 or GHI <= 0:
-        return 0.0, 0.0
-    h   = math.radians(HSun)
-    t   = math.radians(tilt_deg)
-    ar  = math.radians(AzSun - az_panel_deg)
-    cos_ia = (math.cos(ar) * math.cos(h) * math.sin(t)
-              + math.sin(h) * math.cos(t))
-    Rb      = max(cos_ia / math.sin(h), 0.0)
-    fAni    = min(DNI / ENI, 1.0) if ENI > 0 else 0.0
-    Ib_H    = max(GHI - DHI, 0.0)   # irradiância direta na horizontal (Hay 1979)
-    Gt      = max(
-        Ib_H * Rb
-        + DHI * (fAni * Rb + (1 - fAni) * (1 + math.cos(t)) / 2)
-        + GHI * albedo * (1 - math.cos(t)) / 2,
-        0.0,
-    )
-    return Gt, Gt / GHI
+    Eb, Ed, Eg, _ = calc_ft_components(
+        HSun, AzSun, GHI, DNI, DHI, ENI, albedo, tilt_deg, az_panel_deg)
+    Gt = Eb + Ed + Eg
+    return Gt, (Gt / GHI if GHI > 0 else 0.0)
+
+
+def calc_iam_ashrae(cos_ia: float, b0: float) -> float:
+    """
+    Modificador do ângulo de incidência (IAM) pelo modelo ASHRAE:
+        IAM(θ) = 1 − b0·(1/cos θ − 1)
+    Aplica-se à componente direta; b0 = 0,05 é o padrão PVSyst.
+    """
+    if cos_ia <= 0.0:
+        return 0.0
+    if b0 <= 0.0:
+        return 1.0
+    return max(0.0, 1.0 - b0 * (1.0 / cos_ia - 1.0))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 7. Interseção raio-segmento (auxiliar do ray-tracing)
@@ -615,10 +643,28 @@ def simulate_fast(params: dict) -> dict:
     eta_max   = float(inv.get('eta_max', 99.0))
     P_nom_DC  = P_nom_AC / (eta_max / 100.0)       # kW (limite DC)
 
-    # Fator de perdas DC achatado (mismatch + LID + soiling frontal).
-    # A perda ôhmica de cabeamento CC saiu deste lump e virou termo dedicado,
-    # dependente da potência (c_cabo_stc abaixo).
-    f_DC = 0.9320
+    # ── Pacote de perdas explícitas (v3.1) ───────────────────────────────────
+    # IAM (ASHRAE b0): reflexão no vidro em incidência rasante. Difusa e albedo
+    # recebem fatores integrados (θ_eq ≈ 60° e ≈ 75°, respectivamente).
+    iam_b0  = max(0.0, min(float(params.get('iam_b0', 0.05)), 0.20))
+    iam_dif = max(0.0, 1.0 - iam_b0)            # IAM(60°) = 1 − b0
+    iam_alb = max(0.0, 1.0 - 2.864 * iam_b0)    # IAM(75°) = 1 − 2,864·b0
+
+    # Perdas DC nomeadas — decompõem o antigo fator achatado f_DC = 0,9320.
+    # F_NIVEL (nível de irradiância + resíduos DC) é calibrado para que os
+    # DEFAULTS reproduzam exatamente 0,9320 (sem deriva nos resultados).
+    perda_mismatch_pct  = max(0.0, min(float(params.get('perda_mismatch_pct', 2.0)), 10.0))
+    perda_lid_pct       = max(0.0, min(float(params.get('perda_lid_pct', 0.2)), 5.0))
+    ganho_qualidade_pct = max(-3.0, min(float(params.get('ganho_qualidade_pct', 0.4)), 3.0))
+    F_NIVEL = 0.949130
+    f_DC = (F_NIVEL
+            * (1.0 - perda_mismatch_pct / 100.0)
+            * (1.0 - perda_lid_pct / 100.0)
+            * (1.0 + ganho_qualidade_pct / 100.0))
+
+    # Indisponibilidade (paradas/manutenção): fração anual aplicada sobre o
+    # E_Grid após o inversor. Default 0 (opt-in); PVSyst sugere 2%.
+    indisp_frac = max(0.0, min(float(params.get('indisponibilidade_pct', 0.0)), 20.0)) / 100.0
 
     # Perda ôhmica de cabeamento CC (modelo PVSyst): P_loss = R_w·I² → a fração
     # de perda cresce linearmente com a corrente (≈ potência/P_nom). Definida em
@@ -650,6 +696,7 @@ def simulate_fast(params: dict) -> dict:
     hourly_egrid_month = [[0.0] * 24 for _ in range(12)]  # perfil horário do dia representativo
     acc_Gf         = 0.0
     acc_Gb         = 0.0
+    acc_Gb_iam     = 0.0   # plano efetivo APÓS IAM (caminho de energia)
     acc_GHI        = 0.0
     acc_E_grid     = 0.0
     acc_E_arr      = 0.0
@@ -690,6 +737,7 @@ def simulate_fast(params: dict) -> dict:
         day_E_deg     = 0.0
         day_Gf        = 0.0
         day_Gb        = 0.0
+        day_Gb_iam    = 0.0
         day_hist_arr  = [0.0] * N_BINS
         day_hist_grid = [0.0] * N_BINS
         day_hist_pwr_arr  = [0.0] * (N_PWR_BINS + 1)
@@ -702,11 +750,16 @@ def simulate_fast(params: dict) -> dict:
             if GHI < 1.0 or HSun <= 2:
                 continue
 
-            # Transposição frontal (Hay 1979)
-            Gf, _ = calc_ft_frontal(
+            # Transposição frontal (Hay 1979) por componente; IAM (ASHRAE)
+            # aplicado sobre a direta (por hora) e fatores integrados na
+            # difusa/albedo. A face traseira não recebe IAM.
+            Eb, Ed, Eg, cos_ia = calc_ft_components(
                 HSun, AzSun, GHI, DNI, DHI, ENI,
                 albedo, tilt, az_panel,
             )
+            Gf = Eb + Ed + Eg                       # sem IAM (FT/exibição)
+            Gf_iam = (Eb * calc_iam_ashrae(cos_ia, iam_b0)
+                      + Ed * iam_dif + Eg * iam_alb) if iam_b0 > 0 else Gf
 
             # Face traseira (Ray-Tracing 2D) — apenas se bifacial ativo
             if bifacial and phi > 0:
@@ -715,17 +768,19 @@ def simulate_fast(params: dict) -> dict:
                     tilt, mod_h, pitch, albedo,
                     N_seg, N_rays,
                 )
-                Gb = Gf + phi * Gr
+                Gb     = Gf + phi * Gr
+                Gb_iam = Gf_iam + phi * Gr
             else:
                 Gr = 0.0
-                Gb = Gf
+                Gb     = Gf
+                Gb_iam = Gf_iam
 
             # Modelo térmico PVSyst (U-value): T_cell = T_amb + α·G·(1−η)/(Uc+Uv·v)
-            T_cell = T_amb + Gf * 0.9 * (1 - 0.235) / U_value
+            T_cell = T_amb + Gf_iam * 0.9 * (1 - 0.235) / U_value
 
             # Perda por sujidade (PVSyst): perda de irradiância antes do efeito FV
             s_soil    = soil_frac[mi]
-            G_eff     = Gb * (1.0 - s_soil)
+            G_eff     = Gb_iam * (1.0 - s_soil)
 
             # Potência MPP do array antes da perda de cabeamento [kW]
             G_norm    = G_eff / 1000.0
@@ -754,6 +809,7 @@ def simulate_fast(params: dict) -> dict:
             day_GHI    += GHI
             day_Gf     += Gf
             day_Gb     += Gb
+            day_Gb_iam += Gb_iam
             day_E_arr  += P_mpp            # DC no MPP (antes do cabo)
             day_E_cabo += P_cabo
             day_E_deg  += P_deg
@@ -763,10 +819,10 @@ def simulate_fast(params: dict) -> dict:
             # E_stc pós-sujidade; a perda de sujidade é contabilizada à parte.
             day_E_stc     += max(G_norm * P_nom_stc, 0.0)
             day_E_arr_noT += max(G_norm * P_nom_stc * f_DC, 0.0)
-            day_E_soil    += max((Gb / 1000.0) * P_nom_stc * s_soil, 0.0)
+            day_E_soil    += max((Gb_iam / 1000.0) * P_nom_stc * s_soil, 0.0)
 
-            # Histograma por bin de Gf (100 W/m² por bin)
-            b = min(int(Gf // 100), N_BINS - 1) if Gf > 0 else 0
+            # Histograma por bin de Gf efetivo (100 W/m² por bin)
+            b = min(int(Gf_iam // 100), N_BINS - 1) if Gf_iam > 0 else 0
             day_hist_arr[b]  += P_mpp
             day_hist_grid[b] += E_grid_h
 
@@ -784,6 +840,7 @@ def simulate_fast(params: dict) -> dict:
         acc_E_arr      += monthly_E_arr[mi]
         acc_Gf         += monthly_Gf[mi]
         acc_Gb         += (day_Gb / 1000.0) * n_days
+        acc_Gb_iam     += (day_Gb_iam / 1000.0) * n_days
         acc_E_stc      += day_E_stc      * n_days
         acc_E_arr_noT  += day_E_arr_noT  * n_days
         acc_E_cabo     += day_E_cabo     * n_days
@@ -829,6 +886,22 @@ def simulate_fast(params: dict) -> dict:
     loss_inv_pct  = ((E_apos_deg - acc_E_grid) / E_apos_deg * 100.0
                      if E_apos_deg > 0 else 0.0)
 
+    # IAM: % de irradiância refletida no vidro (sobre o plano efetivo; a face
+    # traseira não recebe IAM, então a perda líquida dilui com o ganho bifacial)
+    loss_iam_pct = ((1.0 - acc_Gb_iam / acc_Gb) * 100.0 if acc_Gb > 0 else 0.0)
+
+    # Indisponibilidade: aplicada APÓS o cálculo do PR (PR permanece bruto,
+    # como no PVSyst) — escala todas as saídas de E_Grid.
+    E_grid_bruto = acc_E_grid
+    if indisp_frac > 0:
+        f_disp = 1.0 - indisp_frac
+        acc_E_grid        *= f_disp
+        monthly_E_grid     = [v * f_disp for v in monthly_E_grid]
+        hist_grid_acc      = [v * f_disp for v in hist_grid_acc]
+        hist_pwr_grid_acc  = [v * f_disp for v in hist_pwr_grid_acc]
+        hourly_egrid_month = [[round(v * f_disp, 3) for v in linha]
+                              for linha in hourly_egrid_month]
+
     ft_gain_pct = round((FT_frontal - 1) * 100, 2)
     loss_chain = [
         {'label': 'GHI horizontal',                       'value': round(acc_GHI, 1),           'unit': 'kWh/m²', 'tipo': 'total'},
@@ -836,17 +909,25 @@ def simulate_fast(params: dict) -> dict:
         {'label': 'G frontal inclinado',                   'value': round(acc_Gf, 1),            'unit': 'kWh/m²', 'tipo': 'total'},
         {'label': 'Ganho bifacial',                        'value': round(ganho_bif, 2),         'unit': '%',       'tipo': 'bifacial'},
         {'label': 'G efetivo bifacial',                    'value': round(acc_Gb, 1),            'unit': 'kWh/m²', 'tipo': 'total'},
+        {'label': 'Perdas IAM (reflexão)',                 'value': -round(loss_iam_pct, 2),     'unit': '%',       'tipo': 'perda'},
         {'label': 'E_Array STC (teórico)',                 'value': round(E_stc_pre / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
         {'label': f'Perdas sujidade ({perda_sujidade_pct:g}%)', 'value': -round(loss_soil_pct, 2), 'unit': '%', 'tipo': 'perda'},
         {'label': 'Perdas temperatura',                    'value': -round(loss_temp_pct, 1),    'unit': '%',       'tipo': 'perda'},
-        {'label': 'Perdas DC (mismatch+LID)',              'value': -round(loss_dc_pct, 1),      'unit': '%',       'tipo': 'perda'},
+        {'label': 'Perdas mismatch',                       'value': -round(perda_mismatch_pct, 2), 'unit': '%',     'tipo': 'perda'},
+        {'label': 'Perdas LID',                            'value': -round(perda_lid_pct, 2),    'unit': '%',       'tipo': 'perda'},
+        {'label': 'Qualidade do módulo',                   'value': round(ganho_qualidade_pct, 2), 'unit': '%',     'tipo': 'ganho' if ganho_qualidade_pct >= 0 else 'perda'},
+        {'label': 'Perdas nível de irradiância',           'value': -round((1.0 - F_NIVEL) * 100.0, 2), 'unit': '%', 'tipo': 'perda'},
         {'label': 'E_Array DC (no MPP)',                   'value': round(acc_E_arr / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
         {'label': f'Perdas cabo CC (ôhmica, {perda_cabo_cc_pct:g}% STC)', 'value': -round(loss_cabo_pct, 2), 'unit': '%', 'tipo': 'perda'},
         {'label': f'Perdas degradação (ano {ano_operacao}, {degradacao_anual_pct:g}%/ano)', 'value': -round(loss_deg_pct, 2), 'unit': '%', 'tipo': 'perda'},
         {'label': 'E_Array disponível',                    'value': round(E_apos_deg / 1000, 1), 'unit': 'MWh',    'tipo': 'total'},
         {'label': 'Perdas inversor',                       'value': -round(loss_inv_pct, 1),     'unit': '%',       'tipo': 'perda'},
-        {'label': 'E_Grid (rede)',                         'value': round(acc_E_grid / 1000, 1), 'unit': 'MWh',    'tipo': 'total'},
     ]
+    if indisp_frac > 0:
+        loss_chain.append({'label': f'Perdas indisponibilidade ({indisp_frac * 100:g}%)',
+                           'value': -round(indisp_frac * 100.0, 2), 'unit': '%', 'tipo': 'perda'})
+    loss_chain.append({'label': 'E_Grid (rede)', 'value': round(acc_E_grid / 1000, 1),
+                       'unit': 'MWh', 'tipo': 'total'})
 
     # Série de degradação ao longo da vida útil (escala linear sobre o ano base)
     E_grid_base = acc_E_grid / fator_deg if fator_deg > 0 else acc_E_grid
@@ -932,7 +1013,8 @@ def simulate_fast(params: dict) -> dict:
         # simulate_plant. Não destinados ao frontend diretamente.
         '_acc': {
             'P_nom_stc': P_nom_stc, 'P_nom_AC': P_nom_AC,
-            'GHI': acc_GHI, 'Gf': acc_Gf, 'Gb': acc_Gb,
+            'GHI': acc_GHI, 'Gf': acc_Gf, 'Gb': acc_Gb, 'Gb_iam': acc_Gb_iam,
+            'E_grid_bruto': E_grid_bruto,
             'E_stc': acc_E_stc, 'E_soil': acc_E_soil, 'E_stc_pre': E_stc_pre,
             'E_arr_noT': acc_E_arr_noT, 'E_arr': acc_E_arr,
             'E_cabo': acc_E_cabo, 'E_arr_disp': E_arr_disp,
@@ -969,6 +1051,8 @@ def simulate_plant(params: dict) -> dict:
         'perda_cabo_cc_pct', 'perda_sujidade_pct', 'perda_sujidade_mensal',
         'tipo_montagem', 'Uc', 'Uv',
         'degradacao_anual_pct', 'ano_operacao', 'vida_util_anos',
+        'iam_b0', 'perda_mismatch_pct', 'perda_lid_pct',
+        'ganho_qualidade_pct', 'indisponibilidade_pct',
     )
     shared = {k: params[k] for k in _shared_keys if k in params}
 
@@ -994,6 +1078,7 @@ def simulate_plant(params: dict) -> dict:
     E_arr_disp = _sum('E_arr_disp'); E_deg    = _sum('E_deg')
     E_apos_deg = _sum('E_apos_deg'); E_grid   = _sum('E_grid')
     E_grid_base = _sum('E_grid_base')
+    E_grid_bruto = _sum('E_grid_bruto')   # antes da indisponibilidade
 
     # GHI é por m² no mesmo local → idêntico entre sub-arranjos
     acc_GHI = resultados[0]['_acc']['GHI']
@@ -1001,6 +1086,7 @@ def simulate_plant(params: dict) -> dict:
     wsum = P_nom_stc if P_nom_stc > 0 else 1.0
     acc_Gf = sum(r['_acc']['Gf'] * r['_acc']['P_nom_stc'] for r in resultados) / wsum
     acc_Gb = sum(r['_acc']['Gb'] * r['_acc']['P_nom_stc'] for r in resultados) / wsum
+    acc_Gb_iam = sum(r['_acc']['Gb_iam'] * r['_acc']['P_nom_stc'] for r in resultados) / wsum
 
     monthly_GHI   = resultados[0]['_acc']['monthly_GHI']
     monthly_E_arr = _sum_list('monthly_E_arr')
@@ -1022,14 +1108,23 @@ def simulate_plant(params: dict) -> dict:
     FT_frontal  = acc_Gf / acc_GHI if acc_GHI > 0 else 0.0
     FT_bifacial = acc_Gb / acc_GHI if acc_GHI > 0 else 0.0
     ganho_bif   = ((FT_bifacial / FT_frontal - 1) * 100.0) if FT_frontal > 0 else 0.0
-    PR_pct      = (E_grid / P_nom_stc / acc_Gb * 100.0) if (P_nom_stc > 0 and acc_Gb > 0) else 0.0
+    # PR bruto (antes da indisponibilidade), como no PVSyst
+    PR_pct      = (E_grid_bruto / P_nom_stc / acc_Gb * 100.0) if (P_nom_stc > 0 and acc_Gb > 0) else 0.0
 
+    # Perdas explícitas globais (idênticas entre sub-arranjos — vêm de shared)
+    perda_mismatch_pct  = max(0.0, min(float(params.get('perda_mismatch_pct', 2.0)), 10.0))
+    perda_lid_pct       = max(0.0, min(float(params.get('perda_lid_pct', 0.2)), 5.0))
+    ganho_qualidade_pct = max(-3.0, min(float(params.get('ganho_qualidade_pct', 0.4)), 3.0))
+    indisp_pct          = max(0.0, min(float(params.get('indisponibilidade_pct', 0.0)), 20.0))
+    F_NIVEL = 0.949130
+
+    loss_iam_pct  = ((1.0 - acc_Gb_iam / acc_Gb) * 100.0) if acc_Gb > 0 else 0.0
     loss_soil_pct = (E_soil / E_stc_pre * 100.0) if E_stc_pre > 0 else 0.0
     loss_temp_pct = ((E_arr_noT - E_arr) / E_arr_noT * 100.0) if E_arr_noT > 0 else 0.0
-    loss_dc_pct   = ((1.0 - E_arr_noT / E_stc) * 100.0) if E_stc > 0 else 0.0
     loss_cabo_pct = (E_cabo / E_arr * 100.0) if E_arr > 0 else 0.0
     loss_deg_pct  = (E_deg / E_arr_disp * 100.0) if E_arr_disp > 0 else 0.0
-    loss_inv_pct  = ((E_apos_deg - E_grid) / E_apos_deg * 100.0) if E_apos_deg > 0 else 0.0
+    # Perda do inversor sobre o E_Grid bruto (a indisponibilidade vem depois)
+    loss_inv_pct  = ((E_apos_deg - E_grid_bruto) / E_apos_deg * 100.0) if E_apos_deg > 0 else 0.0
     ft_gain_pct   = round((FT_frontal - 1) * 100, 2)
 
     loss_chain = [
@@ -1038,17 +1133,25 @@ def simulate_plant(params: dict) -> dict:
         {'label': 'G frontal inclinado',           'value': round(acc_Gf, 1),        'unit': 'kWh/m²', 'tipo': 'total'},
         {'label': 'Ganho bifacial',                'value': round(ganho_bif, 2),     'unit': '%',       'tipo': 'bifacial'},
         {'label': 'G efetivo bifacial',            'value': round(acc_Gb, 1),        'unit': 'kWh/m²', 'tipo': 'total'},
+        {'label': 'Perdas IAM (reflexão)',         'value': -round(loss_iam_pct, 2), 'unit': '%',       'tipo': 'perda'},
         {'label': 'E_Array STC (teórico)',         'value': round(E_stc_pre / 1000, 1), 'unit': 'MWh', 'tipo': 'total'},
         {'label': 'Perdas sujidade',               'value': -round(loss_soil_pct, 2), 'unit': '%',      'tipo': 'perda'},
         {'label': 'Perdas temperatura',            'value': -round(loss_temp_pct, 1), 'unit': '%',      'tipo': 'perda'},
-        {'label': 'Perdas DC (mismatch+LID)',      'value': -round(loss_dc_pct, 1),   'unit': '%',      'tipo': 'perda'},
+        {'label': 'Perdas mismatch',               'value': -round(perda_mismatch_pct, 2), 'unit': '%', 'tipo': 'perda'},
+        {'label': 'Perdas LID',                    'value': -round(perda_lid_pct, 2), 'unit': '%',      'tipo': 'perda'},
+        {'label': 'Qualidade do módulo',           'value': round(ganho_qualidade_pct, 2), 'unit': '%', 'tipo': 'ganho' if ganho_qualidade_pct >= 0 else 'perda'},
+        {'label': 'Perdas nível de irradiância',   'value': -round((1.0 - F_NIVEL) * 100.0, 2), 'unit': '%', 'tipo': 'perda'},
         {'label': 'E_Array DC (no MPP)',           'value': round(E_arr / 1000, 1),   'unit': 'MWh',    'tipo': 'total'},
         {'label': 'Perdas cabo CC (ôhmica)',       'value': -round(loss_cabo_pct, 2), 'unit': '%',      'tipo': 'perda'},
         {'label': 'Perdas degradação',             'value': -round(loss_deg_pct, 2),  'unit': '%',      'tipo': 'perda'},
         {'label': 'E_Array disponível',            'value': round(E_apos_deg / 1000, 1), 'unit': 'MWh', 'tipo': 'total'},
         {'label': 'Perdas inversor',               'value': -round(loss_inv_pct, 1),  'unit': '%',      'tipo': 'perda'},
-        {'label': 'E_Grid (rede)',                 'value': round(E_grid / 1000, 1),  'unit': 'MWh',    'tipo': 'total'},
     ]
+    if indisp_pct > 0:
+        loss_chain.append({'label': f'Perdas indisponibilidade ({indisp_pct:g}%)',
+                           'value': -round(indisp_pct, 2), 'unit': '%', 'tipo': 'perda'})
+    loss_chain.append({'label': 'E_Grid (rede)', 'value': round(E_grid / 1000, 1),
+                       'unit': 'MWh', 'tipo': 'total'})
 
     # Série de degradação combinada (parâmetros globais)
     degr_pct = float(params.get('degradacao_anual_pct', 0.5))
@@ -1209,7 +1312,17 @@ def _daily_series_one(p: dict) -> tuple:
     P_nom_stc = N_s * N_strings * Pmpp / 1000.0
     P_nom_AC = float(inv['P_nomAC']); eta_max = float(inv.get('eta_max', 99.0))
     P_nom_DC = P_nom_AC / (eta_max / 100.0)
-    f_DC = 0.9320
+
+    # Pacote de perdas — mesma decomposição do simulate_fast
+    iam_b0  = max(0.0, min(float(p.get('iam_b0', 0.05)), 0.20))
+    iam_dif = max(0.0, 1.0 - iam_b0)
+    iam_alb = max(0.0, 1.0 - 2.864 * iam_b0)
+    f_DC = (0.949130
+            * (1.0 - max(0.0, min(float(p.get('perda_mismatch_pct', 2.0)), 10.0)) / 100.0)
+            * (1.0 - max(0.0, min(float(p.get('perda_lid_pct', 0.2)), 5.0)) / 100.0)
+            * (1.0 + max(-3.0, min(float(p.get('ganho_qualidade_pct', 0.4)), 3.0)) / 100.0))
+    f_disp = 1.0 - max(0.0, min(float(p.get('indisponibilidade_pct', 0.0)), 20.0)) / 100.0
+
     c_cabo_stc = float(p.get('perda_cabo_cc_pct', 1.5)) / 100.0
 
     perda_suj = float(p.get('perda_sujidade_pct', 2.0))
@@ -1280,7 +1393,11 @@ def _daily_series_one(p: dict) -> tuple:
                     doy, hour, dGHI, Kd, lat, lon, tz)
                 if GHI < 1.0 or HSun <= 2:
                     continue
-            Gf, _ = calc_ft_frontal(HSun, AzSun, GHI, DNI, DHI, ENI, albedo, tilt, az_panel)
+            Eb, Ed, Eg, cos_ia = calc_ft_components(
+                HSun, AzSun, GHI, DNI, DHI, ENI, albedo, tilt, az_panel)
+            Gf = ((Eb * calc_iam_ashrae(cos_ia, iam_b0)
+                   + Ed * iam_dif + Eg * iam_alb)
+                  if iam_b0 > 0 else Eb + Ed + Eg)
             Gb = Gf * bf
             T_cell = T_amb + Gf * 0.9 * (1 - 0.235) / U_value
             G_norm = (Gb * (1.0 - s_soil)) / 1000.0
@@ -1288,7 +1405,7 @@ def _daily_series_one(p: dict) -> tuple:
             P_cabo = (c_cabo_stc * P_mpp * P_mpp / P_nom_stc) if P_nom_stc > 0 else 0.0
             P_dc = max(P_mpp - P_cabo, 0.0) * fator_deg
             P_array = min(P_dc, P_nom_DC)
-            E_grid_h = P_array * calc_eta_inv_generico(P_array, inv)
+            E_grid_h = P_array * calc_eta_inv_generico(P_array, inv) * f_disp
             daily_hourly[di][hour] = E_grid_h
             tot += E_grid_h
         daily_egrid[di] = tot
@@ -1341,7 +1458,9 @@ def simulate_daily(params: dict) -> dict:
                        'sonda_hourly', 'N_seg', 'N_rays', 'albedo',
                        'vento_ms', 'perda_cabo_cc_pct', 'perda_sujidade_pct',
                        'perda_sujidade_mensal', 'tipo_montagem', 'Uc', 'Uv',
-                       'degradacao_anual_pct', 'ano_operacao')
+                       'degradacao_anual_pct', 'ano_operacao',
+                       'iam_b0', 'perda_mismatch_pct', 'perda_lid_pct',
+                       'ganho_qualidade_pct', 'indisponibilidade_pct')
         shared = {k: params[k] for k in shared_keys if k in params}
         d_egrid = [0.0] * 365
         d_hourly = [[0.0] * 24 for _ in range(365)]

@@ -15,6 +15,11 @@ const GLOBAL_DEFAULTS = {
   tipo_montagem: 'livre',
   degradacao_anual_pct: 0.5,
   ano_operacao: 1,
+  // Pacote de perdas v3.1
+  iam_b0: 0.05,
+  perda_mismatch_pct: 2.0,
+  perda_lid_pct: 0.2,
+  indisponibilidade_pct: 0,
 }
 
 // Um sub-arranjo: equipamento + arranjo + geometria.
@@ -137,6 +142,10 @@ export default function ConfigForm({ onSubmit, loading }) {
       tipo_montagem: form.tipo_montagem,
       degradacao_anual_pct: form.degradacao_anual_pct,
       ano_operacao: form.ano_operacao,
+      iam_b0: form.iam_b0,
+      perda_mismatch_pct: form.perda_mismatch_pct,
+      perda_lid_pct: form.perda_lid_pct,
+      indisponibilidade_pct: form.indisponibilidade_pct,
     }
 
     // Fonte SONDA: anexa os agregados mensais do TGY da estação próxima.
@@ -349,6 +358,10 @@ export default function ConfigForm({ onSubmit, loading }) {
         </label>
         {field(t('form.cabo'), 'perda_cabo_cc_pct', 'number', 0.1)}
         {field(t('form.sujidade'), 'perda_sujidade_pct', 'number', 0.1)}
+        {field(t('form.iam'), 'iam_b0', 'number', 0.01)}
+        {field(t('form.mismatch'), 'perda_mismatch_pct', 'number', 0.1)}
+        {field(t('form.lid'), 'perda_lid_pct', 'number', 0.1)}
+        {field(t('form.indisp'), 'indisponibilidade_pct', 'number', 0.5)}
         {field(t('form.degradacao'), 'degradacao_anual_pct', 'number', 0.1)}
         {field(t('form.ano_op'), 'ano_operacao', 'number', 1)}
         {field(t('form.albedo'), 'albedo')}

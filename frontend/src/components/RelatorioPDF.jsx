@@ -123,6 +123,18 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
                 <tr><td>{t('rel.montagem')}</td><td>{MONTAGENS.includes(p.tipo_montagem) ? t(`rel.montagem_${p.tipo_montagem}`) : (p.tipo_montagem ?? '—')}</td></tr>
                 <tr><td>{t('rel.cabo')}</td><td>{fmt(p.perda_cabo_cc_pct, 1)}%</td></tr>
                 <tr><td>{t('rel.sujidade')}</td><td>{fmt(p.perda_sujidade_pct, 1)}%</td></tr>
+                {p.iam_b0 !== undefined && (
+                  <tr><td>{t('rel.iam')}</td><td>{fmt(p.iam_b0, 2)}</td></tr>
+                )}
+                {p.perda_mismatch_pct !== undefined && (
+                  <tr><td>{t('rel.mismatch')}</td><td>{fmt(p.perda_mismatch_pct, 1)}%</td></tr>
+                )}
+                {p.perda_lid_pct !== undefined && (
+                  <tr><td>{t('rel.lid')}</td><td>{fmt(p.perda_lid_pct, 1)}%</td></tr>
+                )}
+                {p.indisponibilidade_pct > 0 && (
+                  <tr><td>{t('rel.indisp')}</td><td>{fmt(p.indisponibilidade_pct, 1)}%</td></tr>
+                )}
                 <tr><td>{t('rel.degradacao')}</td><td>{fmt(p.degradacao_anual_pct, 2)}%</td></tr>
                 <tr><td>{t('rel.ano_op')}</td><td>{t('rel.ano_op_v', { n: p.ano_operacao ?? 1 })}</td></tr>
               </tbody></table>
