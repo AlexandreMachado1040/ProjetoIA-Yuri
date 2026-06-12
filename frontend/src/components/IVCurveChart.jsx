@@ -187,12 +187,12 @@ function IVCurveChartInner({ resultado }) {
         <ScatterChart margin={{ top: 20, right: 32, left: 10, bottom: 32 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
 
-          <XAxis type="number" dataKey="V" name="Tensão" unit=" V"
+          <XAxis type="number" dataKey="V" name={t('iv.v')} unit=" V"
                  domain={[0, maxV]} tickCount={9} tick={{ fontSize: 11 }}>
             <Label value={t('iv.tensao')} position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
           </XAxis>
 
-          <YAxis type="number" dataKey="I" name="Corrente" unit=" A"
+          <YAxis type="number" dataKey="I" name={t('iv.i')} unit=" A"
                  domain={[0, maxI]} tick={{ fontSize: 11 }}>
             <Label value={t('iv.corrente')} angle={-90} position="insideLeft" offset={10} fill="#94a3b8" fontSize={12} />
           </YAxis>

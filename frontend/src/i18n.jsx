@@ -160,6 +160,8 @@ pt: {
   'iv.verificar': 'Verificar dimensionamento',
   'iv.tensao': 'Tensão [V]',
   'iv.corrente': 'Corrente [A]',
+  'iv.v': 'Tensão',
+  'iv.i': 'Corrente',
   'iv.temperatura': 'Temperatura',
 
   // Histograma
@@ -334,6 +336,8 @@ pt: {
   'fonte.nasa': 'NASA POWER',
   'fonte.fallback': 'Fallback climatológico',
   'fonte.sonda': 'SONDA/INPE TGY {est} (medido)',
+  'fonte.subs': '{n} sub-arranjos',
+  'fonte.invs': '{n} inversores ({lista})',
 },
 
 // ─────────────────────────────────────────────────────────────────────  EN ──
@@ -459,6 +463,8 @@ en: {
   'iv.verificar': 'Check sizing',
   'iv.tensao': 'Voltage [V]',
   'iv.corrente': 'Current [A]',
+  'iv.v': 'Voltage',
+  'iv.i': 'Current',
   'iv.temperatura': 'Temperature',
 
   'hist.titulo': 'Inverter Output Distribution',
@@ -626,6 +632,8 @@ en: {
   'fonte.nasa': 'NASA POWER',
   'fonte.fallback': 'Climatological fallback',
   'fonte.sonda': 'SONDA/INPE TGY {est} (measured)',
+  'fonte.subs': '{n} sub-arrays',
+  'fonte.invs': '{n} inverters ({lista})',
 },
 
 // ─────────────────────────────────────────────────────────────────────  ZH ──
@@ -751,6 +759,8 @@ zh: {
   'iv.verificar': '请检查设计',
   'iv.tensao': '电压 [V]',
   'iv.corrente': '电流 [A]',
+  'iv.v': '电压',
+  'iv.i': '电流',
   'iv.temperatura': '温度',
 
   'hist.titulo': '逆变器输出分布',
@@ -918,6 +928,8 @@ zh: {
   'fonte.nasa': 'NASA POWER',
   'fonte.fallback': '气候学后备数据',
   'fonte.sonda': 'SONDA/INPE 典型年 {est}（实测）',
+  'fonte.subs': '{n} 个子方阵',
+  'fonte.invs': '{n} 台逆变器（{lista}）',
 },
 }
 
@@ -984,4 +996,17 @@ export function traduzirFonte(fonte, t) {
   if (fonte === 'NASA POWER')               return t('fonte.nasa')
   if (fonte === 'Fallback climatológico')   return t('fonte.fallback')
   return fonte
+}
+
+// Nomes agregados do modo planta gerados pelo motor em PT
+// (ex.: "3 sub-arranjos", "3 inversores (CSI-250K ×2, Huawei ×1)").
+const RE_SUBS = /^(\d+) sub-arranjos$/
+const RE_INVS = /^(\d+) inversores \((.+)\)$/
+
+export function traduzirNomePlanta(nome, t) {
+  if (!nome) return nome
+  let m
+  if ((m = RE_SUBS.exec(nome))) return t('fonte.subs', { n: m[1] })
+  if ((m = RE_INVS.exec(nome))) return t('fonte.invs', { n: m[1], lista: m[2] })
+  return nome
 }

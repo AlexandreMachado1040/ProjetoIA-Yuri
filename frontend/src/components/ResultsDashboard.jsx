@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { exportarCSV } from '../utils/exportRelatorio'
 import { getDailyAnalysis } from '../api/client'
 import { carregarTGY, achatarHorasTGY } from '../utils/sondaTgy'
-import { useI18n, traduzirFonte } from '../i18n.jsx'
+import { useI18n, traduzirFonte, traduzirNomePlanta } from '../i18n.jsx'
 import RelatorioPDF          from './RelatorioPDF'
 import ProducaoMensalChart   from './ProducaoMensalChart'
 import IrradianciaChart      from './IrradianciaChart'
@@ -80,7 +80,11 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
       <div className="results-header">
         <h2>{t('dash.titulo')}</h2>
         <div className="header-tags">
-          {modulo_nome && <span className="fonte-tag">{modulo_nome} · {inversor_nome}</span>}
+          {modulo_nome && (
+            <span className="fonte-tag">
+              {traduzirNomePlanta(modulo_nome, t)} · {traduzirNomePlanta(inversor_nome, t)}
+            </span>
+          )}
           {nasa_source  && <span className="fonte-tag nasa">{traduzirFonte(nasa_source, t)}</span>}
         </div>
         <div className="export-toolbar">
