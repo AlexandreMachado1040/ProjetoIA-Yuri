@@ -241,7 +241,8 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
 
           <div className="rel-chart">
             <ResponsiveContainer width="100%" height={210}>
-              <ComposedChart data={dadosMensais} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <ComposedChart data={dadosMensais} barCategoryGap="28%"
+                margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                 <YAxis yAxisId="e" tick={{ fontSize: 11 }} unit=" kWh" width={72} />

@@ -27,7 +27,8 @@ export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh, sub
       <div className="chart-card">
         <h3>{t('prod.titulo_sa')}</h3>
         <ResponsiveContainer width="100%" height={280}>
-          <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+          <ComposedChart data={data} barCategoryGap="28%"
+            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
             <XAxis dataKey="mes" />
             <YAxis unit=" MWh" />
@@ -68,7 +69,8 @@ export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh, sub
     <div className="chart-card">
       <h3>{t('prod.titulo')}</h3>
       <ResponsiveContainer width="100%" height={260}>
-        <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+        <ComposedChart data={data} barCategoryGap="28%"
+          margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="mes" />
           <YAxis unit=" MWh" />

@@ -19,7 +19,8 @@ export default function IrradianciaChart({ monthlyGHI, monthlyGf, monthlyGb, bif
     <div className="chart-card">
       <h3>{t('irr.titulo')}</h3>
       <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+        <BarChart data={data} barCategoryGap="28%"
+          margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="mes" />
           <YAxis unit=" kWh" />

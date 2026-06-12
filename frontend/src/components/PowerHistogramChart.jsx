@@ -106,7 +106,8 @@ export default function PowerHistogramChart({ resultado }) {
       </p>
 
       <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={data} margin={{ top: 20, right: 24, left: 10, bottom: 32 }}>
+        <ComposedChart data={data} barCategoryGap="28%"
+          margin={{ top: 20, right: 24, left: 10, bottom: 32 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
 
           <XAxis
@@ -154,12 +155,15 @@ export default function PowerHistogramChart({ resultado }) {
               label={{ value: `Pnom STC ${P_nom_stc_kWp} kWp`, position: 'top', fontSize: 10, fill: '#10b981' }} />
           )}
 
-          {/* E_Grid — base da barra (fill na série também alimenta a legenda) */}
-          <Bar dataKey="grid" name={t('hist.egrid_ac')} stackId="a" radius={[0,0,2,2]} fill="#00C8FF" />
+          {/* E_Grid — base da barra (fill na série também alimenta a legenda).
+              maxBarSize garante o afinamento também no eixo numérico. */}
+          <Bar dataKey="grid" name={t('hist.egrid_ac')} stackId="a" radius={[0,0,2,2]}
+            fill="#00C8FF" maxBarSize={26} />
 
           {/* Perda — topo da barra: laranja (eficiência) ou vermelho (clipping).
               O fill da série dá a cor da legenda; as Cells pintam barra a barra. */}
-          <Bar dataKey="loss" name={t('hist.perda_inv')} stackId="a" radius={[3,3,0,0]} opacity={0.85} fill="#f97316">
+          <Bar dataKey="loss" name={t('hist.perda_inv')} stackId="a" radius={[3,3,0,0]}
+            opacity={0.85} fill="#f97316" maxBarSize={26}>
             {data.map((d, i) => (
               <Cell key={i} fill={P_dc && d.kW > P_dc ? '#ef4444' : '#f97316'} />
             ))}
