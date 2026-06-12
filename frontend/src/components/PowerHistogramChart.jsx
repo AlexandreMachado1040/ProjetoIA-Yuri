@@ -154,15 +154,12 @@ export default function PowerHistogramChart({ resultado }) {
               label={{ value: `Pnom STC ${P_nom_stc_kWp} kWp`, position: 'top', fontSize: 10, fill: '#10b981' }} />
           )}
 
-          {/* E_Grid — base da barra */}
-          <Bar dataKey="grid" name={t('hist.egrid_ac')} stackId="a" radius={[0,0,2,2]}>
-            {data.map((d, i) => (
-              <Cell key={i} fill="#00C8FF" />
-            ))}
-          </Bar>
+          {/* E_Grid — base da barra (fill na série também alimenta a legenda) */}
+          <Bar dataKey="grid" name={t('hist.egrid_ac')} stackId="a" radius={[0,0,2,2]} fill="#00C8FF" />
 
-          {/* Perda — topo da barra: laranja (eficiência) ou vermelho (clipping) */}
-          <Bar dataKey="loss" name={t('hist.perda_inv')} stackId="a" radius={[3,3,0,0]} opacity={0.85}>
+          {/* Perda — topo da barra: laranja (eficiência) ou vermelho (clipping).
+              O fill da série dá a cor da legenda; as Cells pintam barra a barra. */}
+          <Bar dataKey="loss" name={t('hist.perda_inv')} stackId="a" radius={[3,3,0,0]} opacity={0.85} fill="#f97316">
             {data.map((d, i) => (
               <Cell key={i} fill={P_dc && d.kW > P_dc ? '#ef4444' : '#f97316'} />
             ))}
