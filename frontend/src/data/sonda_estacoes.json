@@ -1,0 +1,154 @@
+[
+  {
+    "sigla": "BRB",
+    "nome": "Brasília-DF",
+    "lat": -15.601,
+    "lon": -47.713,
+    "arquivo": "/sonda/BRB_TGY.json",
+    "ghi_anual_kwh": 1960.5
+  },
+  {
+    "sigla": "CPA",
+    "nome": "Cachoeira Paulista-SP",
+    "lat": -22.69,
+    "lon": -45.006,
+    "arquivo": "/sonda/CPA_TGY.json",
+    "ghi_anual_kwh": 1799.0
+  },
+  {
+    "sigla": "CAI",
+    "nome": "Caicó-RN",
+    "lat": -6.467,
+    "lon": -37.085,
+    "arquivo": "/sonda/CAI_TGY.json",
+    "ghi_anual_kwh": 2274.1
+  },
+  {
+    "sigla": "CGR",
+    "nome": "Campo Grande-MS (Fazenda)",
+    "lat": -20.447,
+    "lon": -54.839,
+    "arquivo": "/sonda/CGR_TGY.json",
+    "ghi_anual_kwh": 1988.3
+  },
+  {
+    "sigla": "CGU",
+    "nome": "Campo Grande-MS (UNIDERP)",
+    "lat": -20.438,
+    "lon": -54.538,
+    "arquivo": "/sonda/CGU_TGY.json",
+    "ghi_anual_kwh": 1869.7
+  },
+  {
+    "sigla": "CMS",
+    "nome": "Campo Mourão-PR",
+    "lat": -24.061,
+    "lon": -52.385,
+    "arquivo": "/sonda/CMS_TGY.json",
+    "ghi_anual_kwh": 1941.8
+  },
+  {
+    "sigla": "CTS",
+    "nome": "Curitiba-PR (UTFPR)",
+    "lat": -25.508,
+    "lon": -49.319,
+    "arquivo": "/sonda/CTS_TGY.json",
+    "ghi_anual_kwh": 1645.8
+  },
+  {
+    "sigla": "FLN",
+    "nome": "Florianópolis-SC (BSRN)",
+    "lat": -27.602,
+    "lon": -48.518,
+    "arquivo": "/sonda/FLN_TGY.json",
+    "ghi_anual_kwh": 1594.0
+  },
+  {
+    "sigla": "SPK",
+    "nome": "Florianópolis-SC (Sapiens Park)",
+    "lat": -27.431,
+    "lon": -48.441,
+    "arquivo": "/sonda/SPK_TGY.json",
+    "ghi_anual_kwh": 1647.6
+  },
+  {
+    "sigla": "JOI",
+    "nome": "Joinville-SC",
+    "lat": -26.253,
+    "lon": -48.858,
+    "arquivo": "/sonda/JOI_TGY.json",
+    "ghi_anual_kwh": 1193.5
+  },
+  {
+    "sigla": "MDS",
+    "nome": "Medianeira-PR",
+    "lat": -25.3,
+    "lon": -54.115,
+    "arquivo": "/sonda/MDS_TGY.json",
+    "ghi_anual_kwh": 1869.4
+  },
+  {
+    "sigla": "NAT",
+    "nome": "Natal-RN",
+    "lat": -5.837,
+    "lon": -35.206,
+    "arquivo": "/sonda/NAT_TGY.json",
+    "ghi_anual_kwh": 2199.9
+  },
+  {
+    "sigla": "ORN",
+    "nome": "Ourinhos-SP",
+    "lat": -23.0,
+    "lon": -49.844,
+    "arquivo": "/sonda/ORN_TGY.json",
+    "ghi_anual_kwh": 1920.6
+  },
+  {
+    "sigla": "PMA",
+    "nome": "Palmas-TO",
+    "lat": -10.178,
+    "lon": -48.362,
+    "arquivo": "/sonda/PMA_TGY.json",
+    "ghi_anual_kwh": 2012.9
+  },
+  {
+    "sigla": "PTR",
+    "nome": "Petrolina-PE",
+    "lat": -9.069,
+    "lon": -40.32,
+    "arquivo": "/sonda/PTR_TGY.json",
+    "ghi_anual_kwh": 2133.7
+  },
+  {
+    "sigla": "STM",
+    "nome": "Santarém-PA",
+    "lat": -2.683,
+    "lon": -54.535,
+    "arquivo": "/sonda/STM_TGY.json",
+    "ghi_anual_kwh": 1756.8
+  },
+  {
+    "sigla": "SBR",
+    "nome": "Sombrio-SC",
+    "lat": -29.096,
+    "lon": -49.813,
+    "arquivo": "/sonda/SBR_TGY.json",
+    "ghi_anual_kwh": 1462.6
+  },
+  {
+    "sigla": "SLZ",
+    "nome": "São Luís-MA",
+    "lat": -2.593,
+    "lon": -44.212,
+    "arquivo": "/sonda/SLZ_TGY.json",
+    "ghi_anual_kwh": 1807.4
+  },
+  {
+    "sigla": "SMS",
+    "nome": "São Martinho da Serra-RS",
+    "lat": -29.443,
+    "lon": -53.823,
+    "arquivo": "/sonda/SMS_TGY.json",
+    "ghi_anual_kwh": 1752.4
+  }
+]

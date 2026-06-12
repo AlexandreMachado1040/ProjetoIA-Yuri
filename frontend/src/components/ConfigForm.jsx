@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getModulos, getInversores } from '../api/client'
+import ESTACOES_SONDA from '../data/sonda_estacoes.json'
 
 // Parâmetros globais (site + perdas), comuns a todos os sub-arranjos.
 const GLOBAL_DEFAULTS = {
@@ -27,11 +28,9 @@ const SUBARRAY_DEFAULT = {
   mod_height: 2.0,
 }
 
-// Estações SONDA/INPE com TGY pré-processado (gerado por sonda_tgy_pipeline.py).
+// Estações SONDA/INPE com TGY pré-processado: o registro em
+// src/data/sonda_estacoes.json é gerado por sonda_tgy_pipeline.py.
 // O TGY entra como fonte de irradiância medida quando o projeto está próximo.
-const ESTACOES_SONDA = [
-  { sigla: 'BRB', nome: 'Brasília-DF', lat: -15.601, lon: -47.713, arquivo: '/sonda/BRB_TGY.json' },
-]
 const RAIO_SONDA_KM = 100
 
 function distanciaKm(lat1, lon1, lat2, lon2) {
@@ -244,7 +243,7 @@ export default function ConfigForm({ onSubmit, loading }) {
             ({estacaoMaisProxima.sigla}), a {estacaoMaisProxima.dist.toFixed(0)} km.{' '}
             {sondaDisponivel
               ? 'Selecione SONDA para usar medições de solo.'
-              : `Medições de solo disponíveis a até ${RAIO_SONDA_KM} km da estação — ex.: Brasília (lat −15,6 / lon −47,7).`}</>
+              : `Medições de solo disponíveis a até ${RAIO_SONDA_KM} km de uma das ${ESTACOES_SONDA.length} estações — para usar esta, ajuste para lat ${estacaoMaisProxima.lat.toFixed(2)} / lon ${estacaoMaisProxima.lon.toFixed(2)}.`}</>
           )}
         </p>
       </section>

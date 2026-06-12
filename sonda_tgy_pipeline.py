@@ -1,117 +1,210 @@
 # -*- coding: utf-8 -*-
 """
-Pipeline offline SONDA → TGY (Typical GHI Year) — estação BRB (Brasília-DF).
+Pipeline offline SONDA → TGY (Typical GHI Year) — rede completa.
 
 Metodologia (mesma família da ferramenta TMY do PVSyst 7):
-  1. Baixa os anos disponíveis de dados solarimétricos da estação
-     (ZIP por ano, resolução de 1 minuto, fuso UTC).
-  2. Aplica controle de qualidade (código 3333 = ausente; faixas físicas)
-     e agrega 1 minuto → horário em hora local (UTC-3).
+  1. Descobre nas páginas das estações (est_*.html) o código e os anos com
+     ZIP anual de dados solarimétricos (resolução 1 min, fuso UTC).
+  2. Baixa os anos (cache local), aplica controle de qualidade
+     (código 3333 = ausente; faixas físicas) e agrega 1 min → horário
+     em hora local da estação.
   3. Para cada mês do calendário, escolhe o mês real mais representativo
-     do histórico pela estatística de Finkelstein-Schafer (FS) sobre a
-     distribuição dos totais diários de GHI (variante TGY — peso na global).
-  4. Exporta JSON compacto com as 8.760 horas (GHI/DNI/DHI em Wh/m²)
-     + médias mensais prontas para o motor (nasa_data).
+     pela estatística de Finkelstein-Schafer (FS) sobre os totais diários
+     de GHI (variante TGY — peso na global). QC com relaxamento progressivo
+     (80% → 60% → 50% de dias válidos) para meses com poucos candidatos.
+  4. Exporta um JSON por estação (8.760 h de GHI/DNI/DHI em Wh/m²) +
+     registro frontend/src/data/sonda_estacoes.json para o ConfigForm.
 
-Uso:  python sonda_tgy_pipeline.py
-Saída: frontend/public/sonda/BRB_TGY.json
+Uso:   python sonda_tgy_pipeline.py            # rede completa
+       python sonda_tgy_pipeline.py BRB PTR    # só estações citadas
+Saída: frontend/public/sonda/{CODIGO}_TGY.json
 
 Licença dos dados: SONDA/INPE — CC BY 4.0 (sonda.ccst.inpe.br).
 Este script roda localmente; nada disso vai para o Worker.
 """
 
-import io
 import json
-import math
 import os
+import re
+import sys
 import urllib.request
 import zipfile
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 # ── Configuração ────────────────────────────────────────────────────────────
-ESTACAO = {
-    'sigla': 'BRB', 'nome': 'Brasília-DF',
-    'lat': -15.601, 'lon': -47.713, 'alt': 1023.0, 'tz': -3,
-}
-# Anos com cobertura anual razoável (2004/2005/2010 têm só meses isolados)
-ANOS = [2011, 2012, 2013, 2014, 2015, 2018]
-
-URL_BASE  = 'https://sonda.ccst.inpe.br/dados/solarimetricos/BRB'
+URL_SITE  = 'https://sonda.ccst.inpe.br'
 DIR_RAW   = os.path.join(os.path.dirname(__file__), 'sonda_dados', 'raw')
-ARQ_SAIDA = os.path.join(os.path.dirname(__file__),
-                         'frontend', 'public', 'sonda', 'BRB_TGY.json')
+DIR_SAIDA = os.path.join(os.path.dirname(__file__),
+                         'frontend', 'public', 'sonda')
+ARQ_REGISTRO = os.path.join(os.path.dirname(__file__),
+                            'frontend', 'src', 'data', 'sonda_estacoes.json')
 
-COD_AUSENTE   = 3333.0      # código SONDA de dado ausente
-MIN_VALIDOS_H = 30          # mínimo de minutos válidos para fechar a hora
-FRAC_DIAS_MES = 0.80        # mínimo de dias válidos para o mês ser candidato
+# Páginas das estações → (nome de exibição, fuso UTC local).
+# O código (sigla) e as coordenadas vêm dos próprios dados.
+PAGINAS = {
+    'est_brasilia.html':      ('Brasília-DF', -3),
+    'est_cachoeira.html':     ('Cachoeira Paulista-SP', -3),
+    'est_caico.html':         ('Caicó-RN', -3),
+    'est_campogrande.html':   ('Campo Grande-MS (Fazenda)', -4),
+    'est_cguniderp.html':     ('Campo Grande-MS (UNIDERP)', -4),
+    'est_cmourao.html':       ('Campo Mourão-PR', -3),
+    'est_cuiaba.html':        ('Cuiabá-MT', -4),
+    'est_curitiba.html':      ('Curitiba-PR (TECPAR)', -3),
+    'est_utfpr.html':         ('Curitiba-PR (UTFPR)', -3),
+    'est_florianopolis.html': ('Florianópolis-SC (BSRN)', -3),
+    'est_sapiens.html':       ('Florianópolis-SC (Sapiens Park)', -3),
+    'est_joinville.html':     ('Joinville-SC', -3),
+    'est_medianeira.html':    ('Medianeira-PR', -3),
+    'est_natal.html':         ('Natal-RN', -3),
+    'est_ourinhos.html':      ('Ourinhos-SP', -3),
+    'est_palmas.html':        ('Palmas-TO', -3),
+    'est_petrolina.html':     ('Petrolina-PE', -3),
+    'est_santarem.html':      ('Santarém-PA', -3),
+    'est_saoluiz.html':       ('São Luís-MA', -3),
+    'est_saomartinho.html':   ('São Martinho da Serra-RS', -3),
+    'est_sombrio.html':       ('Sombrio-SC', -3),
+}
+
+MIN_ANOS  = 3     # mínimo de anos completos para montar um TGY decente
+MAX_ANOS  = 8     # usa no máximo os N anos mais recentes (limita download)
+
+COD_AUSENTE   = 3333.0
+MIN_VALIDOS_H = 30                    # minutos válidos para fechar a hora
+NIVEIS_QC     = (0.80, 0.60, 0.50)    # fração de dias válidos (relaxamento)
 DIAS_MES      = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
-# Faixas físicas (W/m²) — fora disso o minuto é descartado
-FAIXAS = {'ghi': (-15.0, 1600.0), 'dni': (-50.0, 1500.0), 'dhi': (-15.0, 900.0)}
+FAIXAS = {'ghi': (-15.0, 1700.0), 'dni': (-50.0, 1500.0), 'dhi': (-15.0, 1000.0)}
 
 
-# ── 1. Download (com cache local) ───────────────────────────────────────────
-def baixar_ano(ano: int) -> str:
+# ── 1. Descoberta das estações e anos disponíveis ───────────────────────────
+RE_ZIP_ANO = re.compile(
+    r'dados/solarimetricos/([A-Z0-9]+)/(\d{4})/\1_\2_SD\.zip')
+
+
+def descobrir_estacoes():
+    """Varre as páginas das estações e devolve
+    [{sigla, nome, tz, anos:[...]}, ...] com anos completos disponíveis."""
+    estacoes = []
+    for pagina, (nome, tz) in PAGINAS.items():
+        url = f'{URL_SITE}/{pagina}'
+        try:
+            html = urllib.request.urlopen(url, timeout=30).read().decode(
+                'utf-8', errors='replace')
+        except Exception as e:
+            print(f'  {nome}: falha ao ler página ({e}) — pulada', flush=True)
+            continue
+        achados = RE_ZIP_ANO.findall(html)
+        if not achados:
+            print(f'  {nome}: sem ZIPs anuais — pulada', flush=True)
+            continue
+        sigla = achados[0][0]
+        anos  = sorted({int(a) for _, a in achados})[-MAX_ANOS:]
+        if len(anos) < MIN_ANOS:
+            print(f'  {nome} ({sigla}): só {len(anos)} ano(s) — pulada',
+                  flush=True)
+            continue
+        estacoes.append({'sigla': sigla, 'nome': nome, 'tz': tz, 'anos': anos})
+        print(f'  {nome} ({sigla}): anos {anos}', flush=True)
+    return estacoes
+
+
+# ── 2. Download (com cache local) ───────────────────────────────────────────
+def baixar_ano(sigla: str, ano: int) -> str | None:
     os.makedirs(DIR_RAW, exist_ok=True)
-    destino = os.path.join(DIR_RAW, f'BRB_{ano}_SD.zip')
+    destino = os.path.join(DIR_RAW, f'{sigla}_{ano}_SD.zip')
     if os.path.exists(destino) and os.path.getsize(destino) > 10_000:
-        print(f'  {ano}: cache ({os.path.getsize(destino)//1024} kB)')
         return destino
-    url = f'{URL_BASE}/{ano}/BRB_{ano}_SD.zip'
-    print(f'  {ano}: baixando {url} ...')
-    urllib.request.urlretrieve(url, destino)
-    print(f'  {ano}: ok ({os.path.getsize(destino)//1024} kB)')
+    url = f'{URL_SITE}/dados/solarimetricos/{sigla}/{ano}/{sigla}_{ano}_SD.zip'
+    try:
+        urllib.request.urlretrieve(url, destino)
+    except Exception as e:
+        print(f'    {sigla} {ano}: falha no download ({e})', flush=True)
+        if os.path.exists(destino):
+            os.remove(destino)
+        return None
     return destino
 
 
-# ── 2. Parsing + agregação horária ──────────────────────────────────────────
-def processar_ano(caminho_zip: str):
-    """Devolve {data_local: {hora: {'ghi': v, 'dni': v, 'dhi': v}}} (médias W/m²)."""
-    soma = defaultdict(lambda: defaultdict(lambda: {'ghi': [0.0, 0],
-                                                    'dni': [0.0, 0],
-                                                    'dhi': [0.0, 0]}))
-    desloc = timedelta(hours=ESTACAO['tz'])
+# ── 3. Parsing + agregação horária ──────────────────────────────────────────
+RE_COORD = re.compile(r'lat:\s*(-?\d+\.?\d*).*?lon:\s*(-?\d+\.?\d*)'
+                      r'.*?alt:\s*(-?\d+\.?\d*)', re.S)
+
+
+def processar_ano(caminho_zip: str, sigla: str, tz: int, meta: dict):
+    """Devolve {date_local: {hora: {'ghi','dni','dhi'}}} (médias W/m²).
+    Preenche meta['lat'/'lon'/'alt'] a partir do cabeçalho do .dat."""
+    # acumulador: chave (ordinal_do_dia, hora) → [s_ghi,n_ghi,s_dni,n_dni,s_dhi,n_dhi]
+    acc = defaultdict(lambda: [0.0, 0, 0.0, 0, 0.0, 0])
+    lo_g, hi_g = FAIXAS['ghi']
+    lo_n, hi_n = FAIXAS['dni']
+    lo_d, hi_d = FAIXAS['dhi']
+    cache_ord = {}
+
     with zipfile.ZipFile(caminho_zip) as z:
         for nome in z.namelist():
             if not nome.lower().endswith('.dat'):
                 continue
             with z.open(nome) as fh:
-                texto = io.TextIOWrapper(fh, encoding='utf-8', errors='replace')
-                for linha in texto:
-                    c = linha.split(',')
-                    if len(c) < 8 or c[1] != 'BRB':
+                cab = fh.readline().decode('utf-8', errors='replace')
+                if 'lat' not in meta:
+                    m = RE_COORD.search(cab)
+                    if m:
+                        meta['lat'] = float(m.group(1))
+                        meta['lon'] = float(m.group(2))
+                        meta['alt'] = float(m.group(3))
+                for bruta in fh:
+                    linha = bruta.decode('ascii', errors='replace')
+                    p = linha.split(',', 8)
+                    if len(p) < 8 or p[1] != sigla:
                         continue
+                    ts = p[0]
+                    dia_str = ts[:10]
+                    ordinal = cache_ord.get(dia_str)
+                    if ordinal is None:
+                        try:
+                            ordinal = date(int(ts[0:4]), int(ts[5:7]),
+                                           int(ts[8:10])).toordinal()
+                        except ValueError:
+                            continue
+                        cache_ord[dia_str] = ordinal
                     try:
-                        ts = datetime.strptime(c[0], '%Y-%m-%d %H:%M:%S')
-                        vals = (float(c[5]), float(c[6]), float(c[7]))
+                        hora = int(ts[11:13])
+                        ghi  = float(p[5])
+                        dni  = float(p[6])
+                        dhi  = float(p[7])
                     except ValueError:
                         continue
-                    ts_local = ts + desloc
-                    chave    = (ts_local.date(), ts_local.hour)
-                    for nome_v, v in zip(('ghi', 'dni', 'dhi'), vals):
-                        lo, hi = FAIXAS[nome_v]
-                        if v == COD_AUSENTE or not (lo <= v <= hi):
-                            continue
-                        acc = soma[chave[0]][chave[1]][nome_v]
-                        acc[0] += max(v, 0.0)   # offsets noturnos negativos → 0
-                        acc[1] += 1
+                    # UTC → hora local da estação
+                    h_loc = hora + tz
+                    o_loc = ordinal
+                    if h_loc < 0:
+                        h_loc += 24
+                        o_loc -= 1
+                    elif h_loc > 23:
+                        h_loc -= 24
+                        o_loc += 1
+                    a = acc[(o_loc, h_loc)]
+                    if ghi != COD_AUSENTE and lo_g <= ghi <= hi_g:
+                        a[0] += ghi if ghi > 0.0 else 0.0
+                        a[1] += 1
+                    if dni != COD_AUSENTE and lo_n <= dni <= hi_n:
+                        a[2] += dni if dni > 0.0 else 0.0
+                        a[3] += 1
+                    if dhi != COD_AUSENTE and lo_d <= dhi <= hi_d:
+                        a[4] += dhi if dhi > 0.0 else 0.0
+                        a[5] += 1
 
-    horario = {}
-    for dia, horas in soma.items():
-        reg = {}
-        for h, comp in horas.items():
-            ghi_s, ghi_n = comp['ghi']
-            if ghi_n < MIN_VALIDOS_H:
-                continue                        # hora inválida (GHI é o mínimo)
-            reg[h] = {
-                'ghi': ghi_s / ghi_n,
-                'dni': comp['dni'][0] / comp['dni'][1] if comp['dni'][1] >= MIN_VALIDOS_H else None,
-                'dhi': comp['dhi'][0] / comp['dhi'][1] if comp['dhi'][1] >= MIN_VALIDOS_H else None,
-            }
-        if reg:
-            horario[dia] = reg
-    return horario
+    horario = defaultdict(dict)
+    for (o, h), a in acc.items():
+        if a[1] < MIN_VALIDOS_H:
+            continue
+        horario[date.fromordinal(o)][h] = {
+            'ghi': a[0] / a[1],
+            'dni': a[2] / a[3] if a[3] >= MIN_VALIDOS_H else None,
+            'dhi': a[4] / a[5] if a[5] >= MIN_VALIDOS_H else None,
+        }
+    return dict(horario)
 
 
 def dia_valido(reg_horas: dict) -> bool:
@@ -122,7 +215,7 @@ def dia_valido(reg_horas: dict) -> bool:
     return 0.3 <= total_kwh <= 9.5
 
 
-# ── 3. Estatística de Finkelstein-Schafer ───────────────────────────────────
+# ── 4. Estatística de Finkelstein-Schafer ───────────────────────────────────
 def cdf_empirica(valores):
     v = sorted(valores)
     n = len(v)
@@ -136,41 +229,50 @@ def fs_estatistica(diarios_candidato, diarios_longo_prazo) -> float:
         / len(diarios_candidato)
 
 
-# ── 4. Montagem do TGY ──────────────────────────────────────────────────────
-def montar_tgy(dados_por_ano: dict) -> dict:
-    """dados_por_ano: {ano: {data: {hora: {...}}}} → estrutura final do TGY."""
-    # Totais diários de GHI (kWh/m²) por (ano, mês), só dias válidos
+# ── 5. Montagem do TGY de uma estação ───────────────────────────────────────
+def montar_tgy(est: dict, dados_por_ano: dict, meta: dict):
+    """Devolve o dict do TGY ou None (estação sem dados suficientes)."""
+    anos = sorted(dados_por_ano.keys())
     diarios = defaultdict(dict)          # (ano, mes) -> {dia: total_kwh}
     for ano, dias in dados_por_ano.items():
         for d, horas in dias.items():
-            if dia_valido(horas):
+            if d.year == ano and dia_valido(horas):
                 diarios[(ano, d.month)][d.day] = \
                     sum(v['ghi'] for v in horas.values()) / 1000.0
 
     meses_saida, anos_usados, fs_valores = [], {}, {}
     ghi_mensal, dni_mensal, dhi_mensal   = {}, {}, {}
+    qc_relaxado = {}
+
     for mes in range(1, 13):
         n_dias = DIAS_MES[mes - 1]
-        # Candidatos: anos com fração mínima de dias válidos no mês
-        candidatos = [a for a in ANOS
-                      if len(diarios.get((a, mes), {})) >= FRAC_DIAS_MES * n_dias]
+        candidatos, nivel_usado = [], None
+        for nivel in NIVEIS_QC:
+            candidatos = [a for a in anos
+                          if len(diarios.get((a, mes), {})) >= nivel * n_dias]
+            if candidatos:
+                nivel_usado = nivel
+                break
         if not candidatos:
-            raise RuntimeError(f'Mês {mes:02d}: nenhum ano com dados suficientes')
+            print(f'    mês {mes:02d}: sem candidatos — estação descartada',
+                  flush=True)
+            return None
+        if nivel_usado < NIVEIS_QC[0]:
+            qc_relaxado[mes] = nivel_usado
 
         longo_prazo = [t for a in candidatos
                        for t in diarios[(a, mes)].values()]
         melhor = min(candidatos,
                      key=lambda a: fs_estatistica(
                          list(diarios[(a, mes)].values()), longo_prazo))
-        fs_melhor = fs_estatistica(list(diarios[(melhor, mes)].values()),
-                                   longo_prazo)
         anos_usados[mes] = melhor
-        fs_valores[mes]  = round(fs_melhor, 4)
+        fs_valores[mes]  = round(fs_estatistica(
+            list(diarios[(melhor, mes)].values()), longo_prazo), 4)
 
-        # Perfil médio horário do mês escolhido (para preencher lacunas)
+        # Perfil médio horário do mês escolhido (preenche lacunas)
         perfil = [[] for _ in range(24)]
         dias_mes = {d: h for d, h in dados_por_ano[melhor].items()
-                    if d.month == mes}
+                    if d.month == mes and d.year == melhor}
         for d, horas in dias_mes.items():
             for h, v in horas.items():
                 perfil[h].append(v)
@@ -184,13 +286,9 @@ def montar_tgy(dados_por_ano: dict) -> dict:
             else:
                 perfil_medio.append({'ghi': 0.0, 'dni': 0.0, 'dhi': 0.0})
 
-        # Série final do mês: dia a dia, hora a hora (lacuna → perfil médio)
         dias_json, preenchidos = [], 0
         for nd in range(1, n_dias + 1):
-            try:
-                d = date(melhor, mes, nd)
-            except ValueError:          # 29/02 nunca entra (DIAS_MES fixa 28)
-                continue
+            d = date(melhor, mes, nd)
             horas = dados_por_ano[melhor].get(d, {})
             ghi_l, dni_l, dhi_l = [], [], []
             for h in range(24):
@@ -205,8 +303,8 @@ def montar_tgy(dados_por_ano: dict) -> dict:
                                        else perfil_medio[h]['dhi'] or 0)))
             dias_json.append({'ghi': ghi_l, 'dni': dni_l, 'dhi': dhi_l})
 
-        media_diaria = sum(sum(d['ghi']) for d in dias_json) / n_dias / 1000.0
-        ghi_mensal[mes] = round(media_diaria, 3)
+        ghi_mensal[mes] = round(sum(sum(d['ghi']) for d in dias_json)
+                                / n_dias / 1000.0, 3)
         dni_mensal[mes] = round(sum(sum(d['dni']) for d in dias_json)
                                 / n_dias / 1000.0, 3)
         dhi_mensal[mes] = round(sum(sum(d['dhi']) for d in dias_json)
@@ -214,29 +312,35 @@ def montar_tgy(dados_por_ano: dict) -> dict:
         meses_saida.append({'mes': mes, 'ano': melhor,
                             'horas_preenchidas': preenchidos,
                             'dias': dias_json})
-        print(f'  mês {mes:02d}: ano escolhido {melhor} '
-              f'(FS={fs_melhor:.4f}, candidatos={candidatos}, '
-              f'GHI médio {media_diaria:.2f} kWh/m²/dia, '
-              f'{preenchidos} h preenchidas)')
+
+    ghi_anual = round(sum(ghi_mensal[m] * DIAS_MES[m - 1]
+                          for m in range(1, 13)), 1)
+    print(f'    TGY ok — GHI anual {ghi_anual} kWh/m² | anos usados '
+          f'{sorted(set(anos_usados.values()))}'
+          + (f' | QC relaxado nos meses {sorted(qc_relaxado)}'
+             if qc_relaxado else ''), flush=True)
 
     return {
-        'estacao':    ESTACAO['sigla'],
-        'nome':       ESTACAO['nome'],
-        'lat':        ESTACAO['lat'],
-        'lon':        ESTACAO['lon'],
-        'alt_m':      ESTACAO['alt'],
-        'tz':         ESTACAO['tz'],
+        'estacao':    est['sigla'],
+        'nome':       est['nome'],
+        'lat':        meta.get('lat'),
+        'lon':        meta.get('lon'),
+        'alt_m':      meta.get('alt'),
+        'tz':         est['tz'],
         'fonte':      'SONDA/INPE — sonda.ccst.inpe.br',
         'licenca':    'CC BY 4.0',
         'metodologia': 'TGY — Finkelstein-Schafer sobre totais diários de GHI '
                        '(variante TGY da ferramenta TMY do PVSyst 7)',
-        'anos_disponiveis': ANOS,
+        'anos_disponiveis': est['anos'],
         'anos_usados': anos_usados,
         'fs':          fs_valores,
+        'qc_relaxado': qc_relaxado,
         'gerado_em':   datetime.now().strftime('%d/%m/%Y'),
-        'unidade':     'Wh/m² por hora (média horária em hora local UTC-3)',
+        'unidade':     f'Wh/m² por hora (média horária em hora local '
+                       f'UTC{est["tz"]:+d})',
+        'ghi_anual_kwh': ghi_anual,
         # Médias mensais (kWh/m²/dia) prontas para o nasa_data do motor;
-        # t2m fica com a NASA POWER (a estação BRB não mede temperatura).
+        # t2m fica com a NASA POWER (as estações não medem ou não exportamos).
         'ghi_mensal_kwh_dia': ghi_mensal,
         'dni_mensal_kwh_dia': dni_mensal,
         'dhi_mensal_kwh_dia': dhi_mensal,
@@ -246,27 +350,67 @@ def montar_tgy(dados_por_ano: dict) -> dict:
 
 # ── Execução ────────────────────────────────────────────────────────────────
 def main():
-    print('1/3 — Download dos anos disponíveis (cache em sonda_dados/raw):')
-    zips = {ano: baixar_ano(ano) for ano in ANOS}
+    filtro = {s.upper() for s in sys.argv[1:]}
 
-    print('2/3 — Parsing + QC + agregação horária:')
-    dados = {}
-    for ano, caminho in zips.items():
-        dados[ano] = processar_ano(caminho)
-        n_validos = sum(1 for d, h in dados[ano].items() if dia_valido(h))
-        print(f'  {ano}: {len(dados[ano])} dias com registro, '
-              f'{n_validos} dias válidos')
+    print('1/3 — Descobrindo estações e anos disponíveis:', flush=True)
+    estacoes = descobrir_estacoes()
+    if filtro:
+        estacoes = [e for e in estacoes if e['sigla'] in filtro]
 
-    print('3/3 — Seleção FS e montagem do TGY:')
-    tgy = montar_tgy(dados)
+    print(f'\n2/3 — Processando {len(estacoes)} estações:', flush=True)
+    for est in estacoes:
+        sigla = est['sigla']
+        print(f'  == {est["nome"]} ({sigla}) ==', flush=True)
+        dados, meta = {}, {}
+        for ano in est['anos']:
+            caminho = baixar_ano(sigla, ano)
+            if caminho is None:
+                continue
+            try:
+                dados[ano] = processar_ano(caminho, sigla, est['tz'], meta)
+            except zipfile.BadZipFile:
+                print(f'    {ano}: ZIP corrompido — ignorado', flush=True)
+                continue
+            n_validos = sum(1 for h in dados[ano].values() if dia_valido(h))
+            print(f'    {ano}: {len(dados[ano])} dias, {n_validos} válidos',
+                  flush=True)
+        if len(dados) < MIN_ANOS or 'lat' not in meta:
+            print(f'    {sigla}: dados insuficientes — descartada', flush=True)
+            continue
 
-    os.makedirs(os.path.dirname(ARQ_SAIDA), exist_ok=True)
-    with open(ARQ_SAIDA, 'w', encoding='utf-8') as f:
-        json.dump(tgy, f, ensure_ascii=False, separators=(',', ':'))
-    tamanho = os.path.getsize(ARQ_SAIDA) // 1024
-    print(f'\nTGY gravado em {ARQ_SAIDA} ({tamanho} kB)')
-    print('GHI mensal (kWh/m²/dia):',
-          {m: tgy["ghi_mensal_kwh_dia"][m] for m in range(1, 13)})
+        tgy = montar_tgy(est, dados, meta)
+        if tgy is None:
+            continue
+
+        os.makedirs(DIR_SAIDA, exist_ok=True)
+        arq = os.path.join(DIR_SAIDA, f'{sigla}_TGY.json')
+        with open(arq, 'w', encoding='utf-8') as f:
+            json.dump(tgy, f, ensure_ascii=False, separators=(',', ':'))
+
+    # Registro reconstruído de TODOS os TGYs presentes no diretório de saída
+    # (execuções parciais/interrompidas não perdem estações já processadas).
+    registro = []
+    for arq in sorted(os.listdir(DIR_SAIDA)):
+        if not arq.endswith('_TGY.json'):
+            continue
+        with open(os.path.join(DIR_SAIDA, arq), encoding='utf-8') as f:
+            t = json.load(f)
+        registro.append({
+            'sigla': t['estacao'], 'nome': t['nome'],
+            'lat': t['lat'], 'lon': t['lon'],
+            'arquivo': f'/sonda/{t["estacao"]}_TGY.json',
+            'ghi_anual_kwh': t.get('ghi_anual_kwh'),
+        })
+
+    print(f'\n3/3 — Registro com {len(registro)} estações:', flush=True)
+    registro.sort(key=lambda e: e['nome'])
+    os.makedirs(os.path.dirname(ARQ_REGISTRO), exist_ok=True)
+    with open(ARQ_REGISTRO, 'w', encoding='utf-8') as f:
+        json.dump(registro, f, ensure_ascii=False, indent=2)
+    for e in registro:
+        print(f'  {e["sigla"]:4s} {e["nome"]:35s} '
+              f'GHI {e["ghi_anual_kwh"]:7.1f} kWh/m²/ano', flush=True)
+    print(f'\nRegistro gravado em {ARQ_REGISTRO}', flush=True)
 
 
 if __name__ == '__main__':
