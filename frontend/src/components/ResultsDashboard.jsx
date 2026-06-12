@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { exportarCSV, exportarPNGs } from '../utils/exportRelatorio'
+import { exportarCSV } from '../utils/exportRelatorio'
 import { getDailyAnalysis } from '../api/client'
 import { carregarTGY, achatarHorasTGY } from '../utils/sondaTgy'
 import { useI18n, traduzirFonte } from '../i18n.jsx'
@@ -56,13 +56,6 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
       .catch(() => setDailyLoading(false))
   }, [dailyKey])
 
-  // Exportação de PNGs é assíncrona (um download por gráfico).
-  const [exportandoPng, setExportandoPng] = useState(false)
-  const handlePng = async () => {
-    setExportandoPng(true)
-    try { await exportarPNGs() } finally { setExportandoPng(false) }
-  }
-
   // Pré-visualização do relatório em documento (PDF via impressão).
   const [mostrarRelatorio, setMostrarRelatorio] = useState(false)
 
@@ -93,9 +86,6 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
         <div className="export-toolbar">
           <button type="button" onClick={() => exportarCSV(resultado, inputPayload, { t, lang })} title={t('dash.csv_title')}>
             ⬇ CSV
-          </button>
-          <button type="button" onClick={handlePng} disabled={exportandoPng} title={t('dash.png_title')}>
-            {exportandoPng ? '…' : t('dash.png')}
           </button>
           <button type="button" onClick={() => setMostrarRelatorio(true)} title={t('dash.relatorio_title')}>
             {t('dash.relatorio')}

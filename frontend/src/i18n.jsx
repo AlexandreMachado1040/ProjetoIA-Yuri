@@ -93,8 +93,6 @@ pt: {
   // Dashboard
   'dash.titulo': 'Resultados da Simulação',
   'dash.csv_title': 'Baixar dados em CSV (Excel)',
-  'dash.png': '🖼 PNG',
-  'dash.png_title': 'Baixar cada gráfico como imagem PNG',
   'dash.relatorio': '📄 Relatório',
   'dash.relatorio_title': 'Abrir relatório profissional (salvar em PDF)',
   'dash.kpi_egrid': 'E_Grid Anual',
@@ -398,8 +396,6 @@ en: {
 
   'dash.titulo': 'Simulation Results',
   'dash.csv_title': 'Download data as CSV (Excel)',
-  'dash.png': '🖼 PNG',
-  'dash.png_title': 'Download each chart as a PNG image',
   'dash.relatorio': '📄 Report',
   'dash.relatorio_title': 'Open professional report (save as PDF)',
   'dash.kpi_egrid': 'Annual E_Grid',
@@ -692,8 +688,6 @@ zh: {
 
   'dash.titulo': '仿真结果',
   'dash.csv_title': '下载 CSV 数据（Excel）',
-  'dash.png': '🖼 PNG',
-  'dash.png_title': '将每个图表下载为 PNG 图片',
   'dash.relatorio': '📄 报告',
   'dash.relatorio_title': '打开专业报告（可另存为 PDF）',
   'dash.kpi_egrid': '年并网电量',

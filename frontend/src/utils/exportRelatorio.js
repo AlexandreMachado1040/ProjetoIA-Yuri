@@ -1,4 +1,4 @@
-// Exportação de resultados — CSV (Excel), PNG dos gráficos e PDF (impressão).
+// Exportação de resultados — CSV (Excel).
 // O CSV segue o idioma ativo: PT usa ";" + vírgula decimal (Excel BR);
 // EN/ZH usam "," + ponto decimal (CSV internacional).
 
@@ -139,82 +139,5 @@ export function exportarCSV(resultado, inputPayload, i18n) {
   // BOM para o Excel reconhecer UTF-8.
   const blob = new Blob(['﻿' + L.join('\r\n')], { type: 'text/csv;charset=utf-8' })
   baixarBlob(blob, `aurova_simulacao_${hoje.arquivo}.csv`)
-}
-
-// ── PNG dos gráficos ────────────────────────────────────────────────────────
-// Copia para o clone os estilos calculados (o CSS do app não acompanha o SVG
-// serializado — sem isso, textos e grades sairiam com as cores padrão).
-const PROPS_SVG = [
-  'fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap',
-  'opacity', 'font-size', 'font-family', 'font-weight', 'text-anchor',
-]
-function inlinarEstilos(origem, clone) {
-  const o = [origem, ...origem.querySelectorAll('*')]
-  const c = [clone, ...clone.querySelectorAll('*')]
-  for (let i = 0; i < o.length; i++) {
-    const cs = window.getComputedStyle(o[i])
-    for (const p of PROPS_SVG) {
-      const v = cs.getPropertyValue(p)
-      if (v) c[i].style.setProperty(p, v)
-    }
-  }
-}
-
-function svgParaPng(svg, nome, escala = 2) {
-  return new Promise((resolve) => {
-    const rect = svg.getBoundingClientRect()
-    const w = Math.ceil(rect.width)
-    const h = Math.ceil(rect.height)
-    if (!w || !h) return resolve(false)
-
-    const clone = svg.cloneNode(true)
-    inlinarEstilos(svg, clone)
-    clone.setAttribute('width', w)
-    clone.setAttribute('height', h)
-
-    const xml = new XMLSerializer().serializeToString(clone)
-    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml)
-
-    const img = new Image()
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width  = w * escala
-      canvas.height = h * escala
-      const ctx = canvas.getContext('2d')
-      ctx.scale(escala, escala)
-      ctx.fillStyle = '#0b1226'   // fundo do cartão (o SVG é transparente)
-      ctx.fillRect(0, 0, w, h)
-      ctx.drawImage(img, 0, 0, w, h)
-      canvas.toBlob((blob) => {
-        if (blob) baixarBlob(blob, nome)
-        resolve(!!blob)
-      }, 'image/png')
-    }
-    img.onerror = () => resolve(false)
-    img.src = url
-  })
-}
-
-const slug = (s) => s.toLowerCase()
-  .normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
-  .slice(0, 48)
-
-// Baixa um PNG por gráfico visível (um arquivo por .chart-card com SVG).
-// O navegador pode pedir permissão para múltiplos downloads.
-export async function exportarPNGs() {
-  const cards = document.querySelectorAll('.results-dashboard .chart-card')
-  const hoje = dataHoje()
-  let n = 0
-  for (const card of cards) {
-    const svg = card.querySelector('svg.recharts-surface') ?? card.querySelector('svg')
-    if (!svg) continue
-    const titulo = card.querySelector('h3')?.textContent ?? `grafico_${n + 1}`
-    n++
-    await svgParaPng(svg, `aurova_${String(n).padStart(2, '0')}_${slug(titulo)}_${hoje.arquivo}.png`)
-    // Pausa curta entre downloads para o navegador não descartar nenhum.
-    await new Promise(r => setTimeout(r, 350))
-  }
-  return n
 }
 
