@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getModulos, getInversores } from '../api/client'
 import ESTACOES_SONDA from '../data/sonda_estacoes.json'
 import { carregarTGY } from '../utils/sondaTgy'
+import { useI18n } from '../i18n.jsx'
 
 // Parâmetros globais (site + perdas), comuns a todos os sub-arranjos.
 const GLOBAL_DEFAULTS = {
@@ -43,14 +44,10 @@ function distanciaKm(lat1, lon1, lat2, lon2) {
 }
 
 // Tipos de montagem térmica (U-value PVSyst) — espelha MONTAGEM_PRESETS do motor.
-const MONTAGENS = [
-  { id: 'livre',     label: 'Estrutura livre (ventilada) — Uc 29' },
-  { id: 'semi',      label: 'Semi-integrada no telhado — Uc 20' },
-  { id: 'integrada', label: 'Integrada / verso isolado — Uc 15' },
-  { id: 'pvusa',     label: 'Com vento (PVUSA) — Uc 25, Uv 1,2' },
-]
+const MONTAGENS = ['livre', 'semi', 'integrada', 'pvusa']
 
 export default function ConfigForm({ onSubmit, loading }) {
+  const { t } = useI18n()
   const [modulos,    setModulos]    = useState([])
   const [inversores, setInversores] = useState([])
   const [form,       setForm]       = useState(GLOBAL_DEFAULTS)
@@ -202,22 +199,22 @@ export default function ConfigForm({ onSubmit, loading }) {
 
   return (
     <form onSubmit={handleSubmit} className="config-form">
-      <h2>Parâmetros de Simulação</h2>
+      <h2>{t('form.titulo')}</h2>
 
       <section>
-        <h3>Localização</h3>
-        {field('Latitude (°)', 'lat')}
-        {field('Longitude (°)', 'lon')}
-        {field('Fuso horário (UTC)', 'tz', 'number', 1)}
+        <h3>{t('form.localizacao')}</h3>
+        {field(t('form.lat'), 'lat')}
+        {field(t('form.lon'), 'lon')}
+        {field(t('form.fuso'), 'tz', 'number', 1)}
 
         <label className="field">
-          <span>Fonte de irradiância</span>
+          <span>{t('form.fonte')}</span>
           <select value={fonteIrr} onChange={e => setFonteIrr(e.target.value)}>
-            <option value="nasa">NASA POWER (satélite — padrão)</option>
+            <option value="nasa">{t('form.fonte_nasa')}</option>
             <option value="sonda" disabled={!sondaDisponivel}>
               {sondaDisponivel
-                ? `SONDA ${estacaoMaisProxima.sigla} — medido em solo (TGY)`
-                : `SONDA — sem estação a até ${RAIO_SONDA_KM} km`}
+                ? t('form.fonte_sonda', { sigla: estacaoMaisProxima.sigla })
+                : t('form.fonte_sonda_off', { raio: RAIO_SONDA_KM })}
             </option>
           </select>
         </label>
@@ -225,17 +222,23 @@ export default function ConfigForm({ onSubmit, loading }) {
           fontSize: '0.72rem', color: 'var(--text-sub, #8b95c0)',
           margin: '2px 2px 8px', lineHeight: 1.5,
         }}>
-          {fonteIrr === 'sonda' && estacaoProxima ? (
-            <>Ano típico (TGY) montado de medições minuto a minuto da estação{' '}
-            {estacaoProxima.nome} ({estacaoProxima.dist.toFixed(0)} km do local) —
-            SONDA/INPE, CC BY 4.0. Temperatura permanece da NASA POWER.</>
-          ) : (
-            <>Estação SONDA mais próxima: {estacaoMaisProxima.nome}{' '}
-            ({estacaoMaisProxima.sigla}), a {estacaoMaisProxima.dist.toFixed(0)} km.{' '}
-            {sondaDisponivel
-              ? 'Selecione SONDA para usar medições de solo.'
-              : `Medições de solo disponíveis a até ${RAIO_SONDA_KM} km de uma das ${ESTACOES_SONDA.length} estações — para usar esta, ajuste para lat ${estacaoMaisProxima.lat.toFixed(2)} / lon ${estacaoMaisProxima.lon.toFixed(2)}.`}</>
-          )}
+          {fonteIrr === 'sonda' && estacaoProxima
+            ? t('form.hint_sonda', {
+                nome: estacaoProxima.nome,
+                dist: estacaoProxima.dist.toFixed(0),
+              })
+            : t('form.hint_proxima', {
+                nome: estacaoMaisProxima.nome,
+                sigla: estacaoMaisProxima.sigla,
+                dist: estacaoMaisProxima.dist.toFixed(0),
+              }) + (sondaDisponivel
+                ? t('form.hint_selecione')
+                : t('form.hint_ajuste', {
+                    raio: RAIO_SONDA_KM,
+                    n: ESTACOES_SONDA.length,
+                    lat: estacaoMaisProxima.lat.toFixed(2),
+                    lon: estacaoMaisProxima.lon.toFixed(2),
+                  }))}
         </p>
       </section>
 
@@ -246,12 +249,12 @@ export default function ConfigForm({ onSubmit, loading }) {
           marginBottom: 10, display: 'flex', alignItems: 'center',
           justifyContent: 'space-between', gap: 8,
         }}>
-          <span>Falha ao carregar catálogo.</span>
+          <span>{t('form.catalogo_erro')}</span>
           <button type="button" onClick={loadCatalog} style={{
             background: 'rgba(239,68,68,0.20)', border: '1px solid rgba(239,68,68,0.40)',
             borderRadius: 5, padding: '3px 10px', color: '#fca5a5',
             fontSize: '0.76rem', cursor: 'pointer', whiteSpace: 'nowrap',
-          }}>Tentar novamente</button>
+          }}>{t('form.tentar')}</button>
         </div>
       )}
 
@@ -263,23 +266,23 @@ export default function ConfigForm({ onSubmit, loading }) {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <h3 style={{ margin: 0 }}>
-              {subarrays.length > 1 ? `Sub-arranjo ${idx + 1}` : 'Equipamento e Arranjo'}
+              {subarrays.length > 1 ? t('form.subarranjo', { n: idx + 1 }) : t('form.equipamento')}
             </h3>
             {subarrays.length > 1 && (
               <button type="button" onClick={() => removeSubarray(idx)} style={{
                 background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)',
                 borderRadius: 5, padding: '2px 9px', color: '#fca5a5',
                 fontSize: '0.74rem', cursor: 'pointer',
-              }}>Remover</button>
+              }}>{t('form.remover')}</button>
             )}
           </div>
 
           <label className="field">
-            <span>Módulo{catalogLoading ? ' (carregando…)' : ''}</span>
+            <span>{t('form.modulo')}{catalogLoading ? t('form.carregando') : ''}</span>
             <select value={s.modulo} onChange={setSub(idx, 'modulo')}
               disabled={catalogLoading || catalogError}>
-              {catalogLoading && <option>Carregando…</option>}
-              {catalogError   && <option>Erro ao carregar</option>}
+              {catalogLoading && <option>{t('form.opt_carregando')}</option>}
+              {catalogError   && <option>{t('form.opt_erro')}</option>}
               {modulos.map(m => (
                 <option key={m.nome} value={m.nome}>{m.nome} ({m.Pmpp_Wp} Wp)</option>
               ))}
@@ -287,37 +290,37 @@ export default function ConfigForm({ onSubmit, loading }) {
           </label>
 
           <label className="field">
-            <span>Inversor{catalogLoading ? ' (carregando…)' : ''}</span>
+            <span>{t('form.inversor')}{catalogLoading ? t('form.carregando') : ''}</span>
             <select value={s.inversor} onChange={setSub(idx, 'inversor')}
               disabled={catalogLoading || catalogError}>
-              {catalogLoading && <option>Carregando…</option>}
-              {catalogError   && <option>Erro ao carregar</option>}
+              {catalogLoading && <option>{t('form.opt_carregando')}</option>}
+              {catalogError   && <option>{t('form.opt_erro')}</option>}
               {inversores.map(i => (
                 <option key={i.nome} value={i.nome}>{i.nome} ({i.P_nomAC_kW} kW)</option>
               ))}
             </select>
           </label>
 
-          {subField(idx, 'Módulos em série (N_s)', 'N_s', 'number', 1)}
-          {subField(idx, 'Strings em paralelo (N_strings)', 'N_strings', 'number', 1)}
-          {subField(idx, 'Inclinação (°)', 'tilt')}
-          {subField(idx, 'Azimute (° | 0=Norte no HS)', 'az')}
+          {subField(idx, t('form.ns'), 'N_s', 'number', 1)}
+          {subField(idx, t('form.nstrings'), 'N_strings', 'number', 1)}
+          {subField(idx, t('form.tilt'), 'tilt')}
+          {subField(idx, t('form.az'), 'az')}
 
           <label className="field">
-            <span>Modo</span>
+            <span>{t('form.modo')}</span>
             <select
               value={s.bifacial ? 'BIFACIAL' : 'MONOFACIAL'}
               onChange={e => setSubVal(idx, 'bifacial', e.target.value === 'BIFACIAL')}
             >
-              <option value="BIFACIAL">Bifacial</option>
-              <option value="MONOFACIAL">Monofacial</option>
+              <option value="BIFACIAL">{t('form.bifacial')}</option>
+              <option value="MONOFACIAL">{t('form.monofacial')}</option>
             </select>
           </label>
 
           {s.bifacial && (
             <>
-              {subField(idx, 'Pitch — entre fileiras (m)', 'pitch')}
-              {subField(idx, 'Altura do módulo (m)', 'mod_height')}
+              {subField(idx, t('form.pitch'), 'pitch')}
+              {subField(idx, t('form.mod_height'), 'mod_height')}
             </>
           )}
         </section>
@@ -331,24 +334,24 @@ export default function ConfigForm({ onSubmit, loading }) {
           padding: '8px', color: '#7db3ff', fontSize: '0.82rem',
           cursor: 'pointer', marginBottom: 14,
         }}>
-        + Adicionar inversor / sub-arranjo
+        {t('form.add_sub')}
       </button>
 
       <section>
-        <h3>Perdas</h3>
+        <h3>{t('form.perdas')}</h3>
         <label className="field">
-          <span>Tipo de montagem (térmica)</span>
+          <span>{t('form.montagem')}</span>
           <select value={form.tipo_montagem} onChange={set('tipo_montagem')}>
             {MONTAGENS.map(m => (
-              <option key={m.id} value={m.id}>{m.label}</option>
+              <option key={m} value={m}>{t(`form.montagem_${m}`)}</option>
             ))}
           </select>
         </label>
-        {field('Perda de cabo CC (% em STC)', 'perda_cabo_cc_pct', 'number', 0.1)}
-        {field('Perda por sujidade (% anual)', 'perda_sujidade_pct', 'number', 0.1)}
-        {field('Degradação dos módulos (%/ano)', 'degradacao_anual_pct', 'number', 0.1)}
-        {field('Ano de operação', 'ano_operacao', 'number', 1)}
-        {field('Albedo', 'albedo')}
+        {field(t('form.cabo'), 'perda_cabo_cc_pct', 'number', 0.1)}
+        {field(t('form.sujidade'), 'perda_sujidade_pct', 'number', 0.1)}
+        {field(t('form.degradacao'), 'degradacao_anual_pct', 'number', 0.1)}
+        {field(t('form.ano_op'), 'ano_operacao', 'number', 1)}
+        {field(t('form.albedo'), 'albedo')}
       </section>
 
       <button
@@ -356,7 +359,7 @@ export default function ConfigForm({ onSubmit, loading }) {
         disabled={loading || catalogLoading || catalogError || algumSemModulo}
         className="btn-simular"
       >
-        {loading ? 'Simulando…' : 'Simular'}
+        {loading ? t('form.simulando') : t('form.simular')}
       </button>
     </form>
   )

@@ -3,6 +3,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Label, Legend,
 } from 'recharts'
+import { useI18n } from '../i18n.jsx'
 
 const WORKER_URL = 'https://aurova-motor.alexandreclm.workers.dev'
 
@@ -29,6 +30,7 @@ function yDomain(data, keys) {
 }
 
 export default function FTCurveChart({ inputParams, resultado }) {
+  const { t } = useI18n()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
@@ -55,7 +57,7 @@ export default function FTCurveChart({ inputParams, resultado }) {
   if (!inputParams) return null
   if (loading) return (
     <div className="chart-card" style={{ minHeight: 180, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <p style={{ color: 'var(--text-sub)' }}>Calculando otimização de orientação…</p>
+      <p style={{ color: 'var(--text-sub)' }}>{t('ft.calculando')}</p>
     </div>
   )
   if (error || !data) return null
@@ -99,28 +101,28 @@ export default function FTCurveChart({ inputParams, resultado }) {
 
   return (
     <div className="chart-card">
-      <h3>Otimização de Orientação — Fator de Transposição</h3>
+      <h3>{t('ft.titulo')}</h3>
       <p className="chart-sub">
-        FT frontal atual: <strong>{data.FT_current}</strong>
+        {t('ft.atual_f')} <strong>{data.FT_current}</strong>
         {isBifacial && (
           <> &nbsp;·&nbsp;
-            FT bifacial atual: <strong style={{ color: '#10b981' }}>{FT_bifacial}</strong>
-            &nbsp;(+{ganho_bif_pct}% rear)
+            {t('ft.atual_b')} <strong style={{ color: '#10b981' }}>{FT_bifacial}</strong>
+            &nbsp;(+{ganho_bif_pct}%)
           </>
         )}
         &nbsp;|&nbsp;
-        Ótimo @ {data.optimal_tilt}° incl.:&nbsp;
-        frontal <strong style={{ color: '#00C8FF' }}>{data.FT_optimal_tilt}</strong>
-        {isBifacial && <> · bifacial <strong style={{ color: '#10b981' }}>{FT_bif_opt_tilt}</strong></>}
+        {t('ft.otimo_tilt', { v: data.optimal_tilt })}&nbsp;
+        {t('ft.frontal')} <strong style={{ color: '#00C8FF' }}>{data.FT_optimal_tilt}</strong>
+        {isBifacial && <> · {t('ft.bifacial')} <strong style={{ color: '#10b981' }}>{FT_bif_opt_tilt}</strong></>}
         &nbsp;|&nbsp;
-        Ótimo @ {data.optimal_az}° az.:&nbsp;
-        frontal <strong style={{ color: '#005FFF' }}>{data.FT_optimal_az}</strong>
-        {isBifacial && <> · bifacial <strong style={{ color: '#10b981' }}>{FT_bif_opt_az}</strong></>}
+        {t('ft.otimo_az', { v: data.optimal_az })}&nbsp;
+        {t('ft.frontal')} <strong style={{ color: '#005FFF' }}>{data.FT_optimal_az}</strong>
+        {isBifacial && <> · {t('ft.bifacial')} <strong style={{ color: '#10b981' }}>{FT_bif_opt_az}</strong></>}
       </p>
 
       {isBifacial && (
         <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-          Curva bifacial estimada: FT_front(θ) × (1 + {ganho_bif_pct}%) — ganho constante por orientação
+          {t('ft.estimada', { v: ganho_bif_pct })}
         </p>
       )}
 
@@ -129,13 +131,13 @@ export default function FTCurveChart({ inputParams, resultado }) {
         {/* ── FT × Inclinação ── */}
         <div>
           <p style={{ textAlign:'center', fontSize:'0.8rem', color:'var(--text-sub)', marginBottom:'0.25rem' }}>
-            FT × Inclinação &nbsp;(azimute fixo: {data.current_az}°)
+            {t('ft.x_tilt', { v: data.current_az })}
           </p>
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={tiltData} margin={{ top: 16, right: 20, left: 0, bottom: 28 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
               <XAxis dataKey="tilt" tick={{ fontSize: 10 }}>
-                <Label value="Inclinação [°]" position="insideBottom" offset={-16} fill="#94a3b8" fontSize={11} />
+                <Label value={t('ft.incl')} position="insideBottom" offset={-16} fill="#94a3b8" fontSize={11} />
               </XAxis>
               <YAxis domain={domainTilt} tick={{ fontSize: 10 }} tickFormatter={v => v.toFixed(3)} />
               <Tooltip formatter={formatTooltip} labelFormatter={v => `Tilt: ${v}°`} contentStyle={tooltipStyle} />
@@ -143,17 +145,17 @@ export default function FTCurveChart({ inputParams, resultado }) {
 
               {/* Linha atual */}
               <ReferenceLine x={data.current_tilt} stroke="#f59e0b" strokeDasharray="5 3"
-                label={{ value: `atual ${data.current_tilt}°`, position: 'insideTopLeft', fontSize: 9, fill: '#f59e0b' }} />
+                label={{ value: t('ft.atual', { v: data.current_tilt }), position: 'insideTopLeft', fontSize: 9, fill: '#f59e0b' }} />
 
               {/* Linha ótima */}
               {tiltOptDiff && (
                 <ReferenceLine x={data.optimal_tilt} stroke="#10b981" strokeDasharray="4 2"
-                  label={{ value: `ótimo ${data.optimal_tilt}°`, position: 'insideTopRight', fontSize: 9, fill: '#10b981' }} />
+                  label={{ value: t('ft.otimo', { v: data.optimal_tilt }), position: 'insideTopRight', fontSize: 9, fill: '#10b981' }} />
               )}
 
               {/* Curva frontal */}
               <Line
-                type="monotone" dataKey="frontal" name="FT Frontal"
+                type="monotone" dataKey="frontal" name={t('ft.serie_f')}
                 stroke="#00C8FF" strokeWidth={2}
                 dot={dotFrontTilt} activeDot={{ r: 4 }}
               />
@@ -161,7 +163,7 @@ export default function FTCurveChart({ inputParams, resultado }) {
               {/* Curva bifacial */}
               {isBifacial && (
                 <Line
-                  type="monotone" dataKey="bifacial" name="FT Bifacial"
+                  type="monotone" dataKey="bifacial" name={t('ft.serie_b')}
                   stroke="#10b981" strokeWidth={2} strokeDasharray="6 3"
                   dot={dotBifTilt} activeDot={{ r: 4 }}
                 />
@@ -173,13 +175,13 @@ export default function FTCurveChart({ inputParams, resultado }) {
         {/* ── FT × Azimute ── */}
         <div>
           <p style={{ textAlign:'center', fontSize:'0.8rem', color:'var(--text-sub)', marginBottom:'0.25rem' }}>
-            FT × Azimute &nbsp;(inclinação fixa: {data.current_tilt}°)
+            {t('ft.x_az', { v: data.current_tilt })}
           </p>
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={azData} margin={{ top: 16, right: 20, left: 0, bottom: 28 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
               <XAxis dataKey="az" tick={{ fontSize: 10 }}>
-                <Label value="Azimute [°]" position="insideBottom" offset={-16} fill="#94a3b8" fontSize={11} />
+                <Label value={t('ft.azimute')} position="insideBottom" offset={-16} fill="#94a3b8" fontSize={11} />
               </XAxis>
               <YAxis domain={domainAz} tick={{ fontSize: 10 }} tickFormatter={v => v.toFixed(3)} />
               <Tooltip formatter={formatTooltip} labelFormatter={v => `Az: ${v}°`} contentStyle={tooltipStyle} />
@@ -187,17 +189,17 @@ export default function FTCurveChart({ inputParams, resultado }) {
 
               {/* Linha atual */}
               <ReferenceLine x={data.current_az} stroke="#f59e0b" strokeDasharray="5 3"
-                label={{ value: `atual ${data.current_az}°`, position: 'insideTopLeft', fontSize: 9, fill: '#f59e0b' }} />
+                label={{ value: t('ft.atual', { v: data.current_az }), position: 'insideTopLeft', fontSize: 9, fill: '#f59e0b' }} />
 
               {/* Linha ótima */}
               {azOptDiff && (
                 <ReferenceLine x={data.optimal_az} stroke="#10b981" strokeDasharray="4 2"
-                  label={{ value: `ótimo ${data.optimal_az}°`, position: 'insideTopRight', fontSize: 9, fill: '#10b981' }} />
+                  label={{ value: t('ft.otimo', { v: data.optimal_az }), position: 'insideTopRight', fontSize: 9, fill: '#10b981' }} />
               )}
 
               {/* Curva frontal */}
               <Line
-                type="monotone" dataKey="frontal" name="FT Frontal"
+                type="monotone" dataKey="frontal" name={t('ft.serie_f')}
                 stroke="#005FFF" strokeWidth={2}
                 dot={dotFrontAz} activeDot={{ r: 4 }}
               />
@@ -205,7 +207,7 @@ export default function FTCurveChart({ inputParams, resultado }) {
               {/* Curva bifacial */}
               {isBifacial && (
                 <Line
-                  type="monotone" dataKey="bifacial" name="FT Bifacial"
+                  type="monotone" dataKey="bifacial" name={t('ft.serie_b')}
                   stroke="#10b981" strokeWidth={2} strokeDasharray="6 3"
                   dot={dotBifAz} activeDot={{ r: 4 }}
                 />

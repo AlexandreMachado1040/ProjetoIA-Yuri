@@ -3,10 +3,10 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Label, ReferenceLine,
 } from 'recharts'
+import { useI18n } from '../i18n.jsx'
 
 // Dia do ano (1-365) → "dd/mm" (ano não bissexto)
 const CUM = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
-const MES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
 function doyToLabel(doy) {
   let m = 11
   while (m > 0 && doy <= CUM[m]) m--
@@ -18,6 +18,7 @@ function doyToLabel(doy) {
 // SONDA) é feita uma única vez no ResultsDashboard e compartilhada com o
 // ExploradorDiario via props.
 export default function DailyEgridChart({ daily: data, medido, loading }) {
+  const { t, meses: MES_ABREV } = useI18n()
   const [diaSel, setDiaSel] = useState(0)   // índice 0-364
 
   useEffect(() => {
@@ -27,7 +28,7 @@ export default function DailyEgridChart({ daily: data, medido, loading }) {
 
   if (loading) return (
     <div className="chart-card" style={{ minHeight: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <p style={{ color: 'var(--text-sub)' }}>Calculando análise diária (365 dias)…</p>
+      <p style={{ color: 'var(--text-sub)' }}>{t('daily.calculando')}</p>
     </div>
   )
   if (!data?.daily_egrid) return null
@@ -50,7 +51,7 @@ export default function DailyEgridChart({ daily: data, medido, loading }) {
   return (
     <div className="chart-card">
       <h3>
-        Análise Diária — E_Grid ao longo do ano (365 dias)
+        {t('daily.titulo')}
         {medido && (
           <span style={{
             marginLeft: 10, fontSize: '0.68rem', fontWeight: 600,
@@ -58,18 +59,16 @@ export default function DailyEgridChart({ daily: data, medido, loading }) {
             color: '#34d399', borderRadius: 5, padding: '2px 8px',
             verticalAlign: 2, whiteSpace: 'nowrap',
           }}>
-            ● dias medidos — SONDA {medido}
+            {t('daily.medido', { sigla: medido })}
           </span>
         )}
       </h3>
       <p className="chart-sub">
-        {medido
-          ? `Ano típico (TGY) com dias reais da estação ${medido} — nuvens e variabilidade meteorológica medidas. `
-          : ''}
-        Total anual: <strong>{(totalAno / 1000).toFixed(1)} MWh</strong>
-        &nbsp;·&nbsp; Média/dia: <strong>{media.toFixed(1)} kWh</strong>
-        &nbsp;·&nbsp; Pico: <strong>{daily[idxPico].toFixed(1)} kWh</strong> ({doyToLabel(idxPico + 1)})
-        &nbsp;·&nbsp; Mínimo: <strong>{daily[idxMin].toFixed(1)} kWh</strong> ({doyToLabel(idxMin + 1)})
+        {medido ? t('daily.medido_sub', { sigla: medido }) : ''}
+        {t('daily.total')} <strong>{(totalAno / 1000).toFixed(1)} MWh</strong>
+        &nbsp;·&nbsp; {t('daily.media_dia')} <strong>{media.toFixed(1)} kWh</strong>
+        &nbsp;·&nbsp; {t('daily.pico')} <strong>{daily[idxPico].toFixed(1)} kWh</strong> ({doyToLabel(idxPico + 1)})
+        &nbsp;·&nbsp; {t('daily.minimo')} <strong>{daily[idxMin].toFixed(1)} kWh</strong> ({doyToLabel(idxMin + 1)})
       </p>
 
       <ResponsiveContainer width="100%" height={240}>
@@ -84,15 +83,15 @@ export default function DailyEgridChart({ daily: data, medido, loading }) {
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
           <XAxis dataKey="doy" ticks={ticks} tick={{ fontSize: 10 }}
             tickFormatter={d => MES_ABREV[CUM.findIndex(c => c + 1 === d)] ?? ''}>
-            <Label value="Dia do ano" position="insideBottom" offset={-12} fill="#94a3b8" fontSize={11} />
+            <Label value={t('daily.dia_ano')} position="insideBottom" offset={-12} fill="#94a3b8" fontSize={11} />
           </XAxis>
           <YAxis tick={{ fontSize: 11 }} unit=" kWh" />
           <Tooltip
-            formatter={v => [`${(+v).toFixed(1)} kWh`, 'E_Grid/dia']}
+            formatter={v => [`${(+v).toFixed(1)} kWh`, t('daily.egrid_dia')]}
             labelFormatter={d => doyToLabel(d)}
             contentStyle={{ background: '#0d1530', border: '1px solid rgba(0,95,255,0.3)', borderRadius: 6, fontSize: 12 }} />
           <ReferenceLine y={+media.toFixed(1)} stroke="#f59e0b" strokeDasharray="5 3"
-            label={{ value: `Média ${media.toFixed(0)} kWh`, position: 'right', fontSize: 10, fill: '#f59e0b' }} />
+            label={{ value: t('daily.media_ref', { v: media.toFixed(0) }), position: 'right', fontSize: 10, fill: '#f59e0b' }} />
           <ReferenceLine x={diaSel + 1} stroke="#00C8FF" strokeWidth={1.5}
             label={{ value: doyToLabel(diaSel + 1), position: 'top', fontSize: 10, fill: '#00C8FF' }} />
           <Area type="monotone" dataKey="egrid" stroke="#10b981" strokeWidth={1.5} fill="url(#dailyFill)" />
@@ -102,7 +101,7 @@ export default function DailyEgridChart({ daily: data, medido, loading }) {
       {/* Seletor de dia + perfil horário */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '12px 2px 6px', flexWrap: 'wrap' }}>
         <span style={{ fontSize: '0.82rem', color: 'var(--text-sub)' }}>
-          Dia: <strong style={{ color: '#00C8FF' }}>{doyToLabel(diaSel + 1)}</strong>
+          {t('daily.dia')} <strong style={{ color: '#00C8FF' }}>{doyToLabel(diaSel + 1)}</strong>
         </span>
         <input
           type="range" min={1} max={365} value={diaSel + 1}
@@ -110,7 +109,7 @@ export default function DailyEgridChart({ daily: data, medido, loading }) {
           style={{ flex: 1, minWidth: 160, accentColor: '#00C8FF' }}
         />
         <span style={{ fontSize: '0.8rem', color: 'var(--text-sub)' }}>
-          Total: <strong>{totalDia.toFixed(1)} kWh</strong> · Pico: <strong>{pico.toFixed(1)} kW</strong>
+          {t('daily.total_dia')} <strong>{totalDia.toFixed(1)} kWh</strong> · {t('daily.pico_dia')} <strong>{pico.toFixed(1)} kW</strong>
         </span>
       </div>
 
@@ -124,7 +123,7 @@ export default function DailyEgridChart({ daily: data, medido, loading }) {
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
           <XAxis dataKey="hora" tick={{ fontSize: 11 }} tickFormatter={h => `${h}h`}>
-            <Label value={`Perfil horário — ${doyToLabel(diaSel + 1)}`} position="insideBottom" offset={-12} fill="#94a3b8" fontSize={11} />
+            <Label value={t('daily.perfil', { v: doyToLabel(diaSel + 1) })} position="insideBottom" offset={-12} fill="#94a3b8" fontSize={11} />
           </XAxis>
           <YAxis tick={{ fontSize: 11 }} unit=" kW" />
           <Tooltip formatter={v => [`${v} kWh`, 'E_Grid']} labelFormatter={h => `${h}:00 – ${h}:59`}

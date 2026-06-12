@@ -4,31 +4,22 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
+import { useI18n, traduzirRotuloMotor, traduzirFonte } from '../i18n.jsx'
 import './RelatorioPDF.css'
 
-const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
-               'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-
-const MONTAGEM_LABELS = {
-  livre:     'Estrutura livre (ventilada) — Uc 29 W/m²K',
-  semi:      'Semi-integrada no telhado — Uc 20 W/m²K',
-  integrada: 'Integrada / verso isolado — Uc 15 W/m²K',
-  pvusa:     'Com vento (PVUSA) — Uc 25, Uv 1,2',
-}
-
-// Número no padrão brasileiro.
-const fmt = (v, dec = 1) =>
-  (v === null || v === undefined || Number.isNaN(+v))
-    ? '—'
-    : (+v).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec })
-
-const hoje = () => {
-  const d = new Date()
-  const p = (n) => String(n).padStart(2, '0')
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`
-}
+const MONTAGENS = ['livre', 'semi', 'integrada', 'pvusa']
 
 export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
+  const { t, locale, fmt, meses: MESES } = useI18n()
+  const hoje = () => {
+    const d = new Date()
+    const p = (n) => String(n).padStart(2, '0')
+    return locale === 'en-US'
+      ? `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+      : locale === 'zh-CN'
+        ? `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+        : `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`
+  }
   // Marca o body para o @media print esconder o app e mostrar só o documento.
   useEffect(() => {
     document.body.classList.add('relatorio-aberto')
@@ -72,10 +63,10 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
     <div className="relatorio-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="relatorio-toolbar">
         <button type="button" className="btn-imprimir" onClick={() => window.print()}>
-          🖨 Imprimir / Salvar PDF
+          {t('rel.imprimir')}
         </button>
         <button type="button" className="btn-fechar" onClick={onClose}>
-          ✕ Fechar
+          {t('rel.fechar')}
         </button>
       </div>
 
@@ -97,43 +88,43 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
             </svg>
             <h1>
               Aurova Motor Solar
-              <span>Relatório de Simulação Fotovoltaica</span>
+              <span>{t('rel.doc_titulo')}</span>
             </h1>
           </div>
           <div className="rel-meta">
             <strong>{hoje()}</strong>
-            Simulação anual · clima NASA POWER
-            {r.is_plant ? <><br />{r.n_inversores ?? r.subarrays?.length} inversores</> : null}
+            {t('rel.meta')}
+            {r.is_plant ? <><br />{t('rel.inversores', { n: r.n_inversores ?? r.subarrays?.length })}</> : null}
           </div>
         </header>
         <p className="rel-subtitulo">
-          Simulação horária com transposição Hay, modelo térmico U-value e
-          {subsCfg.some(s => s.bifacial) ? ' ganho bifacial por ray-tracing 2D.' : ' módulos monofaciais.'}
-          {r.nasa_source ? ` Fonte meteorológica: ${r.nasa_source}.` : ''}
+          {t('rel.sub_base')}
+          {subsCfg.some(s => s.bifacial) ? t('rel.sub_bif') : t('rel.sub_mono')}
+          {r.nasa_source ? t('rel.sub_fonte', { v: traduzirFonte(r.nasa_source, t) }) : ''}
         </p>
 
         {/* ── 1. Dados do projeto ── */}
         <section className="rel-secao">
-          <h2><span className="rel-num">1.</span>Dados do projeto</h2>
+          <h2><span className="rel-num">1.</span>{t('rel.s1')}</h2>
           <div className="rel-grid-2">
             <div>
-              <h3>Localização</h3>
+              <h3>{t('rel.s1_loc')}</h3>
               <table className="rel-pares"><tbody>
-                <tr><td>Latitude</td><td>{fmt(p.lat, 4)}°</td></tr>
-                <tr><td>Longitude</td><td>{fmt(p.lon, 4)}°</td></tr>
-                <tr><td>Fuso horário</td><td>UTC{p.tz >= 0 ? '+' : ''}{p.tz}</td></tr>
-                <tr><td>Albedo do solo</td><td>{fmt(p.albedo, 2)}</td></tr>
-                <tr><td>GHI anual no local</td><td>{fmt(r.GHI_anual, 1)} kWh/m²</td></tr>
+                <tr><td>{t('rel.lat')}</td><td>{fmt(p.lat, 4)}°</td></tr>
+                <tr><td>{t('rel.lon')}</td><td>{fmt(p.lon, 4)}°</td></tr>
+                <tr><td>{t('rel.fuso')}</td><td>UTC{p.tz >= 0 ? '+' : ''}{p.tz}</td></tr>
+                <tr><td>{t('rel.albedo')}</td><td>{fmt(p.albedo, 2)}</td></tr>
+                <tr><td>{t('rel.ghi_local')}</td><td>{fmt(r.GHI_anual, 1)} kWh/m²</td></tr>
               </tbody></table>
             </div>
             <div>
-              <h3>Perdas configuradas</h3>
+              <h3>{t('rel.s1_perdas')}</h3>
               <table className="rel-pares"><tbody>
-                <tr><td>Montagem (térmica)</td><td>{MONTAGEM_LABELS[p.tipo_montagem] ?? p.tipo_montagem ?? '—'}</td></tr>
-                <tr><td>Cabo CC (em STC)</td><td>{fmt(p.perda_cabo_cc_pct, 1)}%</td></tr>
-                <tr><td>Sujidade (anual)</td><td>{fmt(p.perda_sujidade_pct, 1)}%</td></tr>
-                <tr><td>Degradação dos módulos</td><td>{fmt(p.degradacao_anual_pct, 2)}%/ano</td></tr>
-                <tr><td>Ano de operação</td><td>{p.ano_operacao ?? 1}º ano</td></tr>
+                <tr><td>{t('rel.montagem')}</td><td>{MONTAGENS.includes(p.tipo_montagem) ? t(`rel.montagem_${p.tipo_montagem}`) : (p.tipo_montagem ?? '—')}</td></tr>
+                <tr><td>{t('rel.cabo')}</td><td>{fmt(p.perda_cabo_cc_pct, 1)}%</td></tr>
+                <tr><td>{t('rel.sujidade')}</td><td>{fmt(p.perda_sujidade_pct, 1)}%</td></tr>
+                <tr><td>{t('rel.degradacao')}</td><td>{fmt(p.degradacao_anual_pct, 2)}%</td></tr>
+                <tr><td>{t('rel.ano_op')}</td><td>{t('rel.ano_op_v', { n: p.ano_operacao ?? 1 })}</td></tr>
               </tbody></table>
             </div>
           </div>
@@ -141,15 +132,15 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
 
         {/* ── 2. Configuração do sistema ── */}
         <section className="rel-secao">
-          <h2><span className="rel-num">2.</span>Configuração do sistema</h2>
+          <h2><span className="rel-num">2.</span>{t('rel.s2')}</h2>
           <table className="rel-tabela">
             <thead>
               <tr>
-                <th>#</th><th>Módulo</th><th>Inversor</th>
-                <th className="num">Arranjo</th>
-                <th className="num">Inclinação</th>
-                <th className="num">Azimute</th>
-                <th>Modo</th>
+                <th>#</th><th>{t('rel.col_modulo')}</th><th>{t('rel.col_inversor')}</th>
+                <th className="num">{t('rel.col_arranjo')}</th>
+                <th className="num">{t('rel.col_incl')}</th>
+                <th className="num">{t('rel.col_az')}</th>
+                <th>{t('rel.col_modo')}</th>
               </tr>
             </thead>
             <tbody>
@@ -158,14 +149,14 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
                   <td>{i + 1}</td>
                   <td>{s.modulo}</td>
                   <td>{s.inversor}</td>
-                  <td className="num">{s.N_s} × {s.N_strings} strings</td>
+                  <td className="num">{s.N_s} × {s.N_strings} {t('rel.strings')}</td>
                   <td className="num">{fmt(s.tilt, 1)}°</td>
                   <td className="num">{fmt(s.az, 0)}°</td>
-                  <td>{s.bifacial ? 'Bifacial' : 'Monofacial'}</td>
+                  <td>{s.bifacial ? t('form.bifacial') : t('form.monofacial')}</td>
                 </tr>
               ))}
               <tr className="rel-total">
-                <td colSpan={3}>Total da usina</td>
+                <td colSpan={3}>{t('rel.total_usina')}</td>
                 <td className="num" colSpan={2}>{fmt(r.P_nom_stc_kWp, 2)} kWp (STC)</td>
                 <td className="num" colSpan={2}>{fmt(r.P_nom_AC_kW, 1)} kW (AC) · R DC/AC {fmt(R_DC_AC, 2)}</td>
               </tr>
@@ -175,43 +166,43 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
 
         {/* ── 3. Resultados anuais ── */}
         <section className="rel-secao">
-          <h2><span className="rel-num">3.</span>Resultados anuais</h2>
+          <h2><span className="rel-num">3.</span>{t('rel.s3')}</h2>
           <div className="rel-kpis">
             <div className="rel-kpi">
-              <span className="rel-kpi-rotulo">Energia injetada (E_Grid)</span>
-              <span className="rel-kpi-valor">{fmt(r.E_grid_anual_kWh / 1000, 1)}<small>MWh/ano</small></span>
+              <span className="rel-kpi-rotulo">{t('rel.kpi_egrid')}</span>
+              <span className="rel-kpi-valor">{fmt(r.E_grid_anual_kWh / 1000, 1)}<small>MWh</small></span>
             </div>
             <div className="rel-kpi">
-              <span className="rel-kpi-rotulo">Performance Ratio</span>
+              <span className="rel-kpi-rotulo">{t('rel.kpi_pr')}</span>
               <span className="rel-kpi-valor">{fmt(r.PR_pct, 1)}<small>%</small></span>
             </div>
             <div className="rel-kpi">
-              <span className="rel-kpi-rotulo">Produtividade (Yf)</span>
+              <span className="rel-kpi-rotulo">{t('rel.kpi_yf')}</span>
               <span className="rel-kpi-valor">{fmt(Yf, 0)}<small>kWh/kWp</small></span>
             </div>
             <div className="rel-kpi">
-              <span className="rel-kpi-rotulo">Ganho bifacial</span>
+              <span className="rel-kpi-rotulo">{t('rel.kpi_bif')}</span>
               <span className="rel-kpi-valor">+{fmt(r.ganho_bif_pct, 2)}<small>%</small></span>
             </div>
           </div>
           <table className="rel-pares"><tbody>
-            <tr><td>Fator de transposição frontal (FT)</td><td>{fmt(r.FT_frontal, 3)}</td></tr>
+            <tr><td>{t('rel.ft_frontal')}</td><td>{fmt(r.FT_frontal, 3)}</td></tr>
             {r.FT_bifacial !== r.FT_frontal && (
-              <tr><td>Fator de transposição bifacial efetivo</td><td>{fmt(r.FT_bifacial, 3)}</td></tr>
+              <tr><td>{t('rel.ft_bif')}</td><td>{fmt(r.FT_bifacial, 3)}</td></tr>
             )}
-            <tr><td>Energia média diária injetada</td><td>{fmt(r.E_grid_anual_kWh / 365, 1)} kWh/dia</td></tr>
+            <tr><td>{t('rel.media_diaria')}</td><td>{fmt(r.E_grid_anual_kWh / 365, 1)} kWh</td></tr>
           </tbody></table>
         </section>
 
         {/* ── 4. Produção mensal ── */}
         <section className="rel-secao">
-          <h2><span className="rel-num">4.</span>Produção mensal</h2>
+          <h2><span className="rel-num">4.</span>{t('rel.s4')}</h2>
           <table className="rel-tabela">
             <thead>
               <tr>
-                <th>Mês</th>
+                <th>{t('rel.col_mes')}</th>
                 <th className="num">GHI (kWh/m²)</th>
-                <th className="num">G frontal (kWh/m²)</th>
+                <th className="num">{t('loss.g_frontal')} (kWh/m²)</th>
                 <th className="num">E_Array (kWh)</th>
                 <th className="num">E_Grid (kWh)</th>
               </tr>
@@ -227,7 +218,7 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
                 </tr>
               ))}
               <tr className="rel-total">
-                <td>Ano</td>
+                <td>{t('rel.ano')}</td>
                 <td className="num">{fmt(somaCol('ghi'), 1)}</td>
                 <td className="num">{fmt(somaCol('gf'), 1)}</td>
                 <td className="num">{fmt(somaCol('earr'), 0)}</td>
@@ -257,19 +248,19 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
         {/* ── 5. Diagrama de perdas ── */}
         {r.loss_chain?.length > 0 && (
           <section className="rel-secao">
-            <h2><span className="rel-num">5.</span>Diagrama de perdas {r.is_plant ? '— usina completa' : ''}</h2>
-            <CascataPerdas lossChain={r.loss_chain} />
+            <h2><span className="rel-num">5.</span>{t('rel.s5')}{r.is_plant ? t('rel.s5_usina') : ''}</h2>
+            <CascataPerdas lossChain={r.loss_chain} t={t} fmt={fmt} />
           </section>
         )}
 
         {/* ── 6. Detalhamento por sub-arranjo (modo planta) ── */}
         {r.is_plant && r.subarrays?.length > 0 && (
           <section className="rel-secao">
-            <h2><span className="rel-num">6.</span>Detalhamento por sub-arranjo</h2>
+            <h2><span className="rel-num">6.</span>{t('rel.s6')}</h2>
             <table className="rel-tabela">
               <thead>
                 <tr>
-                  <th>#</th><th>Inversor</th><th>Módulo</th>
+                  <th>#</th><th>{t('rel.col_inversor')}</th><th>{t('rel.col_modulo')}</th>
                   <th className="num">kWp</th>
                   <th className="num">R DC/AC</th>
                   <th className="num">E_Grid (kWh)</th>
@@ -293,8 +284,8 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
 
             {r.subarrays.map((s) => s.loss_chain?.length > 0 && (
               <div key={`lc-${s.idx}`} style={{ marginTop: 16 }}>
-                <h3>Perdas — Sub-arranjo {s.idx} ({s.inversor_nome})</h3>
-                <CascataPerdas lossChain={s.loss_chain} />
+                <h3>{t('rel.perdas_sub', { n: s.idx, inv: s.inversor_nome })}</h3>
+                <CascataPerdas lossChain={s.loss_chain} t={t} fmt={fmt} />
               </div>
             ))}
           </section>
@@ -302,8 +293,8 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
 
         {/* ── Rodapé ── */}
         <footer className="rel-rodape">
-          <span>Aurova Motor Solar — simulação fotovoltaica bifacial</span>
-          <span>Relatório gerado em {hoje()}</span>
+          <span>{t('rel.rodape')}</span>
+          <span>{t('rel.gerado', { v: hoje() })}</span>
         </footer>
       </div>
     </div>
@@ -313,7 +304,7 @@ export default function RelatorioPDF({ resultado, inputPayload, onClose }) {
 }
 
 // Cascata de perdas no estilo PVSyst: totais em destaque, deltas indentados.
-function CascataPerdas({ lossChain }) {
+function CascataPerdas({ lossChain, t, fmt }) {
   return (
     <div className="rel-perdas">
       {lossChain.map((item, i) => {
@@ -322,7 +313,7 @@ function CascataPerdas({ lossChain }) {
           return (
             <div key={i} className={`rel-perda-total${final ? ' final' : ''}`}>
               <span className="v">{fmt(item.value, 1)}<small>{item.unit}</small></span>
-              <span className="l">{item.label}</span>
+              <span className="l">{traduzirRotuloMotor(item.label, t)}</span>
             </div>
           )
         }
@@ -332,7 +323,7 @@ function CascataPerdas({ lossChain }) {
             <span className={`pct ${pos ? 'pos' : 'neg'}`}>
               {pos ? '+' : ''}{fmt(item.value, 2)}%
             </span>
-            <span>{item.label}</span>
+            <span>{traduzirRotuloMotor(item.label, t)}</span>
           </div>
         )
       })}

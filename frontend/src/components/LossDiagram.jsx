@@ -1,4 +1,7 @@
+import { useI18n, traduzirRotuloMotor } from '../i18n.jsx'
+
 export default function LossDiagram({ lossChain, resultado }) {
+  const { t } = useI18n()
   if (!lossChain || lossChain.length === 0) return null
 
   const {
@@ -17,32 +20,32 @@ export default function LossDiagram({ lossChain, resultado }) {
   const Ya         = P_nom_stc_kWp > 0 ? +(E_arr_sum / P_nom_stc_kWp).toFixed(0) : 0
   const R_DC_AC    = P_nom_AC_kW > 0 ? +(P_nom_stc_kWp / P_nom_AC_kW).toFixed(3) : 0
 
-  // Generate smart notes
+  // Notas inteligentes de dimensionamento
   const notas = []
-  if (R_DC_AC > 1.3) notas.push(`R_DC/AC = ${R_DC_AC} → inversor superdimensionado`)
-  else if (R_DC_AC < 0.9) notas.push(`R_DC/AC = ${R_DC_AC} → arranjo subdimensionado`)
-  else notas.push(`R_DC/AC = ${R_DC_AC} → dimensionamento adequado`)
+  if (R_DC_AC > 1.3) notas.push(t('loss.nota_super', { v: R_DC_AC }))
+  else if (R_DC_AC < 0.9) notas.push(t('loss.nota_sub', { v: R_DC_AC }))
+  else notas.push(t('loss.nota_ok', { v: R_DC_AC }))
 
   const E_grid_clip = monthly_E_grid ? monthly_E_grid.reduce((s, v) => s + v, 0) : 0
   const E_arr_total = monthly_E_arr  ? monthly_E_arr.reduce((s, v) => s + v, 0)  : 0
   if (E_arr_total > 0) {
     const clipPct = ((E_arr_total - E_grid_clip) / E_arr_total * 100).toFixed(1)
-    if (parseFloat(clipPct) < 1) notas.push(`IL_Pmax ≈ ${clipPct}% (sem clipping significativo)`)
-    else notas.push(`Perdas clipping ≈ ${clipPct}% — considere inversor maior`)
+    if (parseFloat(clipPct) < 1) notas.push(t('loss.nota_clip_ok', { v: clipPct }))
+    else notas.push(t('loss.nota_clip', { v: clipPct }))
   }
 
   if (ganho_bif_pct !== undefined) {
-    if (ganho_bif_pct < 1) notas.push(`Ganho bifacial ${ganho_bif_pct}% — verificar N_seg/albedo`)
-    else notas.push(`Ganho bifacial ${ganho_bif_pct}% (φ=0.80)`)
+    if (ganho_bif_pct < 1) notas.push(t('loss.nota_bif_baixo', { v: ganho_bif_pct }))
+    else notas.push(t('loss.nota_bif', { v: ganho_bif_pct }))
   }
 
-  if (PR_pct >= 85)       notas.push(`PR = ${PR_pct}% — excelente`)
-  else if (PR_pct >= 78)  notas.push(`PR = ${PR_pct}% — bom`)
-  else if (PR_pct > 0)    notas.push(`PR = ${PR_pct}% — abaixo do esperado, verificar perdas`)
+  if (PR_pct >= 85)       notas.push(t('loss.nota_pr_otimo', { v: PR_pct }))
+  else if (PR_pct >= 78)  notas.push(t('loss.nota_pr_bom', { v: PR_pct }))
+  else if (PR_pct > 0)    notas.push(t('loss.nota_pr_baixo', { v: PR_pct }))
 
   return (
     <div className="chart-card loss-diagram">
-      <h3>Loss Diagram — Cadeia de Perdas</h3>
+      <h3>{t('loss.titulo')}</h3>
 
       <div className="loss-layout">
         {/* LEFT — cascade */}
@@ -55,7 +58,7 @@ export default function LossDiagram({ lossChain, resultado }) {
                   <span className="loss-val">
                     {item.value} <span className="loss-unit">{item.unit}</span>
                   </span>
-                  <span className="loss-label">{item.label}</span>
+                  <span className="loss-label">{traduzirRotuloMotor(item.label, t)}</span>
                 </div>
               )
             }
@@ -67,7 +70,7 @@ export default function LossDiagram({ lossChain, resultado }) {
                 <span className="loss-pct" style={{ color: pctColor }}>
                   {isPos ? '+' : ''}{item.value}%
                 </span>
-                <span className="loss-label loss-delta-label">→ {item.label}</span>
+                <span className="loss-label loss-delta-label">→ {traduzirRotuloMotor(item.label, t)}</span>
               </div>
             )
           })}
@@ -76,37 +79,37 @@ export default function LossDiagram({ lossChain, resultado }) {
         {/* RIGHT — results + notes */}
         <div className="loss-right">
           <div className="loss-panel">
-            <h4>Resultados Anuais</h4>
+            <h4>{t('loss.anuais')}</h4>
             <table className="loss-table">
               <tbody>
                 <tr><td>GHI</td><td>{GHI_anual} kWh/m²</td></tr>
-                <tr><td>G frontal</td><td>{G_frontal} kWh/m²</td></tr>
-                <tr><td>FT frontal</td><td>{FT_frontal}</td></tr>
-                {G_rear > 0 && <tr><td>G traseiro (bifacial)</td><td>{G_rear} kWh/m²</td></tr>}
+                <tr><td>{t('loss.g_frontal')}</td><td>{G_frontal} kWh/m²</td></tr>
+                <tr><td>{t('loss.ft_frontal')}</td><td>{FT_frontal}</td></tr>
+                {G_rear > 0 && <tr><td>{t('loss.g_rear')}</td><td>{G_rear} kWh/m²</td></tr>}
                 {FT_bifacial && FT_bifacial !== FT_frontal && (
-                  <tr><td>FT bifacial efetivo</td><td>{FT_bifacial}</td></tr>
+                  <tr><td>{t('loss.ft_bif')}</td><td>{FT_bifacial}</td></tr>
                 )}
                 {ganho_bif_pct > 0 && (
-                  <tr className="loss-row-pos"><td>Ganho bifacial</td><td>+{ganho_bif_pct}%</td></tr>
+                  <tr className="loss-row-pos"><td>{t('loss.ganho_bif')}</td><td>+{ganho_bif_pct}%</td></tr>
                 )}
               </tbody>
             </table>
 
-            <h4 style={{ marginTop: '1rem' }}>Performance do Sistema</h4>
+            <h4 style={{ marginTop: '1rem' }}>{t('loss.perf')}</h4>
             <table className="loss-table">
               <tbody>
-                <tr className="loss-row-highlight"><td>E_Grid anual</td><td>{E_grid_MWh} MWh</td></tr>
+                <tr className="loss-row-highlight"><td>{t('loss.egrid_anual')}</td><td>{E_grid_MWh} MWh</td></tr>
                 <tr className="loss-row-highlight"><td>PR</td><td>{PR_pct}%</td></tr>
-                <tr><td>Yf (yield final)</td><td>{Yf} kWh/kWp</td></tr>
-                <tr><td>Ya (yield array)</td><td>{Ya} kWh/kWp</td></tr>
-                <tr><td>Yr (yield ref.)</td><td>{Yr} kWh/m²</td></tr>
+                <tr><td>{t('loss.yf')}</td><td>{Yf} kWh/kWp</td></tr>
+                <tr><td>{t('loss.ya')}</td><td>{Ya} kWh/kWp</td></tr>
+                <tr><td>{t('loss.yr')}</td><td>{Yr} kWh/m²</td></tr>
               </tbody>
             </table>
           </div>
 
           {notas.length > 0 && (
             <div className="loss-notes">
-              <h4>Notas de dimensionamento</h4>
+              <h4>{t('loss.notas')}</h4>
               <ul>
                 {notas.map((n, i) => <li key={i}>{n}</li>)}
               </ul>

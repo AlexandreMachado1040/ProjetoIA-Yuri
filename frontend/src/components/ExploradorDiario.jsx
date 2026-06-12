@@ -3,6 +3,7 @@ import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Label,
 } from 'recharts'
+import { useI18n } from '../i18n.jsx'
 
 // Explorador Diário — curvas de irradiância GHI/DNI/DHI (+ céu limpo) de cada
 // dia do ano, com calendário em mapa de calor e KPIs (HSP, picos, E_Grid).
@@ -10,21 +11,18 @@ import {
 
 const DIAS_MES   = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 const CUM        = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
-const MESES      = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-
-const CURVAS = [
-  { id: 'ghi',    rotulo: 'GHI',       cor: '#f5a623' },
-  { id: 'dni',    rotulo: 'DNI',       cor: '#00C8FF' },
-  { id: 'dhi',    rotulo: 'DHI',       cor: '#a78bfa' },
-  { id: 'ghi_cs', rotulo: 'Céu limpo', cor: 'rgba(226,232,240,0.55)' },
-]
-
-const fmt = (v, dec = 0) => (+v).toLocaleString('pt-BR', {
-  minimumFractionDigits: dec, maximumFractionDigits: dec,
-})
 
 export default function ExploradorDiario({ daily, medido, loading }) {
+  const { t, locale, mesesNome: MESES } = useI18n()
+  const CURVAS = [
+    { id: 'ghi',    rotulo: 'GHI',              cor: '#f5a623' },
+    { id: 'dni',    rotulo: 'DNI',              cor: '#00C8FF' },
+    { id: 'dhi',    rotulo: 'DHI',              cor: '#a78bfa' },
+    { id: 'ghi_cs', rotulo: t('exp.ceu_limpo'), cor: 'rgba(226,232,240,0.55)' },
+  ]
+  const fmt = (v, dec = 0) => (+v).toLocaleString(locale, {
+    minimumFractionDigits: dec, maximumFractionDigits: dec,
+  })
   const [diaSel, setDiaSel] = useState(() => {
     // Abre no dia de maior GHI quando os dados chegarem (ver useMemo abaixo)
     return null
@@ -42,7 +40,7 @@ export default function ExploradorDiario({ daily, medido, loading }) {
   if (loading) return (
     <div className="chart-card" style={{ minHeight: 140, display: 'flex',
       alignItems: 'center', justifyContent: 'center' }}>
-      <p style={{ color: 'var(--text-sub)' }}>Carregando explorador diário…</p>
+      <p style={{ color: 'var(--text-sub)' }}>{t('exp.carregando')}</p>
     </div>
   )
   if (!irr?.ghi || !ghiDiario) return null
@@ -78,7 +76,7 @@ export default function ExploradorDiario({ daily, medido, loading }) {
   return (
     <div className="chart-card">
       <h3>
-        Explorador Diário — Irradiância hora a hora
+        {t('exp.titulo')}
         {medido && (
           <span style={{
             marginLeft: 10, fontSize: '0.68rem', fontWeight: 600,
@@ -86,15 +84,13 @@ export default function ExploradorDiario({ daily, medido, loading }) {
             color: '#34d399', borderRadius: 5, padding: '2px 8px',
             verticalAlign: 2, whiteSpace: 'nowrap',
           }}>
-            ● dias medidos — SONDA {medido}
+            {t('daily.medido', { sigla: medido })}
           </span>
         )}
       </h3>
       <p className="chart-sub">
-        {medido
-          ? 'Curvas medidas minuto a minuto (agregadas por hora) na estação SONDA.'
-          : 'Curvas sintetizadas da climatologia NASA POWER (Collares-Pereira + Erbs).'}
-        {' '}Clique num dia do calendário ou navegue com as setas.
+        {medido ? t('exp.sub_medido') : t('exp.sub_sintetico')}
+        {t('exp.sub_acao')}
       </p>
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -134,17 +130,17 @@ export default function ExploradorDiario({ daily, medido, loading }) {
             })}
           </div>
           <p style={{ fontSize: '0.68rem', color: 'var(--text-sub)', margin: '6px 2px 0' }}>
-            Cor da célula ∝ GHI do dia (máx. do ano: {ghiMax.toFixed(2)} kWh/m²)
+            {t('exp.heatmap', { v: ghiMax.toFixed(2) })}
           </p>
 
           {/* KPIs do dia */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 10 }}>
-            <KpiDia rotulo="GHI / HSP" valor={`${totalGHI.toFixed(2)}`} unidade="kWh/m² · h" cor="#f5a623" />
-            <KpiDia rotulo="DNI total" valor={totalDNI.toFixed(2)} unidade="kWh/m²" cor="#00C8FF" />
-            <KpiDia rotulo="DHI total" valor={totalDHI.toFixed(2)} unidade="kWh/m²" cor="#a78bfa" />
-            <KpiDia rotulo="Pico GHI" valor={fmt(picoGHI)} unidade={`W/m² · ${hPico}h`} cor="#f5a623" />
+            <KpiDia rotulo={t('exp.kpi_ghi')} valor={`${totalGHI.toFixed(2)}`} unidade="kWh/m² · h" cor="#f5a623" />
+            <KpiDia rotulo={t('exp.kpi_dni')} valor={totalDNI.toFixed(2)} unidade="kWh/m²" cor="#00C8FF" />
+            <KpiDia rotulo={t('exp.kpi_dhi')} valor={totalDHI.toFixed(2)} unidade="kWh/m²" cor="#a78bfa" />
+            <KpiDia rotulo={t('exp.kpi_pico')} valor={fmt(picoGHI)} unidade={`W/m² · ${hPico}h`} cor="#f5a623" />
             {egridDia != null && (
-              <KpiDia rotulo="E_Grid do dia" valor={fmt(egridDia, 1)} unidade="kWh" cor="#10b981" larga />
+              <KpiDia rotulo={t('exp.kpi_egrid')} valor={fmt(egridDia, 1)} unidade="kWh" cor="#10b981" larga />
             )}
           </div>
         </div>
@@ -152,11 +148,11 @@ export default function ExploradorDiario({ daily, medido, loading }) {
         {/* ── Curvas do dia ── */}
         <div style={{ flex: 1, minWidth: 300 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-            <button type="button" onClick={() => navDia(-1)} style={botaoNav}>‹ dia</button>
+            <button type="button" onClick={() => navDia(-1)} style={botaoNav}>{t('exp.dia_ant')}</button>
             <strong style={{ color: '#00C8FF', fontSize: '0.92rem', minWidth: 46, textAlign: 'center' }}>
               {rotuloDia}
             </strong>
-            <button type="button" onClick={() => navDia(1)} style={botaoNav}>dia ›</button>
+            <button type="button" onClick={() => navDia(1)} style={botaoNav}>{t('exp.dia_seg')}</button>
             <span style={{ flex: 1 }} />
             {CURVAS.map(c => (
               <button key={c.id} type="button"
@@ -184,7 +180,7 @@ export default function ExploradorDiario({ daily, medido, loading }) {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
               <XAxis dataKey="hora" tick={{ fontSize: 11 }} tickFormatter={h => `${h}h`}>
-                <Label value={`Irradiância — ${rotuloDia}`} position="insideBottom"
+                <Label value={t('exp.grafico', { v: rotuloDia })} position="insideBottom"
                   offset={-10} fill="#94a3b8" fontSize={11} />
               </XAxis>
               <YAxis tick={{ fontSize: 11 }} unit=" W/m²" width={72} />
@@ -194,7 +190,7 @@ export default function ExploradorDiario({ daily, medido, loading }) {
                 contentStyle={{ background: '#0d1530', border: '1px solid rgba(0,95,255,0.3)',
                   borderRadius: 6, fontSize: 12 }} />
               {curvas.ghi_cs && (
-                <Line type="monotone" dataKey="ghi_cs" name="Céu limpo"
+                <Line type="monotone" dataKey="ghi_cs" name={t('exp.ceu_limpo')}
                   stroke="rgba(226,232,240,0.55)" strokeDasharray="6 4"
                   strokeWidth={1.5} dot={false} />
               )}
@@ -216,13 +212,13 @@ export default function ExploradorDiario({ daily, medido, loading }) {
           {/* Tabela horária (só horas com sol) */}
           <details style={{ marginTop: 6 }}>
             <summary style={{ fontSize: '0.78rem', color: 'var(--text-sub)', cursor: 'pointer' }}>
-              Tabela horária — {rotuloDia}
+              {t('exp.tabela', { v: rotuloDia })}
             </summary>
             <div style={{ overflowX: 'auto', marginTop: 6 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
                 <thead>
                   <tr style={{ color: 'var(--text-sub)', textAlign: 'right' }}>
-                    <th style={{ textAlign: 'left', padding: '3px 8px' }}>Hora</th>
+                    <th style={{ textAlign: 'left', padding: '3px 8px' }}>{t('exp.hora')}</th>
                     <th style={{ padding: '3px 8px' }}>GHI (W/m²)</th>
                     <th style={{ padding: '3px 8px' }}>DNI (W/m²)</th>
                     <th style={{ padding: '3px 8px' }}>DHI (W/m²)</th>

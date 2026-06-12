@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { exportarCSV, exportarPNGs } from '../utils/exportRelatorio'
 import { getDailyAnalysis } from '../api/client'
 import { carregarTGY, achatarHorasTGY } from '../utils/sondaTgy'
+import { useI18n, traduzirFonte } from '../i18n.jsx'
 import RelatorioPDF          from './RelatorioPDF'
 import ProducaoMensalChart   from './ProducaoMensalChart'
 import IrradianciaChart      from './IrradianciaChart'
@@ -13,6 +14,7 @@ import PowerHistogramChart   from './PowerHistogramChart'
 import FTCurveChart          from './FTCurveChart'
 
 export default function ResultsDashboard({ resultado, inputPayload }) {
+  const { t, locale, lang } = useI18n()
   // Sub-arranjos recolhidos (por idx). Padrão: todos expandidos.
   const [recolhidos, setRecolhidos] = useState({})
   const toggleSub = (idx) =>
@@ -83,20 +85,20 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
   return (
     <div className="results-dashboard">
       <div className="results-header">
-        <h2>Resultados da Simulação</h2>
+        <h2>{t('dash.titulo')}</h2>
         <div className="header-tags">
           {modulo_nome && <span className="fonte-tag">{modulo_nome} · {inversor_nome}</span>}
-          {nasa_source  && <span className="fonte-tag nasa">{nasa_source}</span>}
+          {nasa_source  && <span className="fonte-tag nasa">{traduzirFonte(nasa_source, t)}</span>}
         </div>
         <div className="export-toolbar">
-          <button type="button" onClick={() => exportarCSV(resultado, inputPayload)} title="Baixar dados em CSV (Excel)">
+          <button type="button" onClick={() => exportarCSV(resultado, inputPayload, { t, lang })} title={t('dash.csv_title')}>
             ⬇ CSV
           </button>
-          <button type="button" onClick={handlePng} disabled={exportandoPng} title="Baixar cada gráfico como imagem PNG">
-            {exportandoPng ? '…' : '🖼 PNG'}
+          <button type="button" onClick={handlePng} disabled={exportandoPng} title={t('dash.png_title')}>
+            {exportandoPng ? '…' : t('dash.png')}
           </button>
-          <button type="button" onClick={() => setMostrarRelatorio(true)} title="Abrir relatório profissional (salvar em PDF)">
-            📄 Relatório
+          <button type="button" onClick={() => setMostrarRelatorio(true)} title={t('dash.relatorio_title')}>
+            {t('dash.relatorio')}
           </button>
         </div>
       </div>
@@ -110,34 +112,34 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
       )}
 
       <div className="kpi-grid">
-        <KPI label="E_Grid Anual"   value={E_grid_MWh}           unit="MWh/ano" color="blue" />
-        <KPI label="PR"             value={`${PR_pct}%`}                        color={PR_pct >= 80 ? 'green' : 'orange'} />
-        <KPI label="GHI Anual"      value={GHI_anual}            unit="kWh/m²" color="blue" />
-        <KPI label="Ganho Bifacial" value={`+${ganho_bif_pct}%`}               color="green" />
-        <KPI label="FT Frontal"     value={FT_frontal}                          color="gray" />
-        <KPI label="FT Bifacial"    value={FT_bifacial}                         color="gray" />
-        <KPI label="Potência STC"   value={P_nom_stc_kWp}        unit="kWp"    color="gray" />
-        <KPI label="Potência AC"    value={P_nom_AC_kW}          unit="kW"     color="gray" />
-        <KPI label="Yf"             value={Yf}                   unit="h/ano"  color="blue" />
-        <KPI label="R DC/AC"        value={R_DC_AC}                             color="gray" />
+        <KPI label={t('dash.kpi_egrid')} value={E_grid_MWh}           unit="MWh" color="blue" />
+        <KPI label={t('dash.kpi_pr')}    value={`${PR_pct}%`}                    color={PR_pct >= 80 ? 'green' : 'orange'} />
+        <KPI label={t('dash.kpi_ghi')}   value={GHI_anual}            unit="kWh/m²" color="blue" />
+        <KPI label={t('dash.kpi_bif')}   value={`+${ganho_bif_pct}%`}            color="green" />
+        <KPI label={t('dash.kpi_ftf')}   value={FT_frontal}                      color="gray" />
+        <KPI label={t('dash.kpi_ftb')}   value={FT_bifacial}                     color="gray" />
+        <KPI label={t('dash.kpi_pstc')}  value={P_nom_stc_kWp}        unit="kWp" color="gray" />
+        <KPI label={t('dash.kpi_pac')}   value={P_nom_AC_kW}          unit="kW"  color="gray" />
+        <KPI label={t('dash.kpi_yf')}    value={Yf}                   unit="kWh/kWp" color="blue" />
+        <KPI label={t('dash.kpi_rdcac')} value={R_DC_AC}                         color="gray" />
       </div>
 
       <LossDiagram lossChain={loss_chain} resultado={resultado} />
 
       {is_plant && subarrays?.length > 0 && (
         <div className="chart-card">
-          <h3>Sub-arranjos ({subarrays.length} inversores)</h3>
+          <h3>{t('dash.subs_titulo', { n: subarrays.length })}</h3>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
                 <tr style={{ color: 'var(--text-sub)', textAlign: 'right' }}>
                   <th style={{ textAlign: 'left', padding: '4px 8px' }}>#</th>
-                  <th style={{ textAlign: 'left', padding: '4px 8px' }}>Inversor</th>
-                  <th style={{ textAlign: 'left', padding: '4px 8px' }}>Módulo</th>
-                  <th style={{ padding: '4px 8px' }}>Arranjo</th>
+                  <th style={{ textAlign: 'left', padding: '4px 8px' }}>{t('dash.col_inversor')}</th>
+                  <th style={{ textAlign: 'left', padding: '4px 8px' }}>{t('dash.col_modulo')}</th>
+                  <th style={{ padding: '4px 8px' }}>{t('dash.col_arranjo')}</th>
                   <th style={{ padding: '4px 8px' }}>kWp</th>
-                  <th style={{ padding: '4px 8px' }}>R DC/AC</th>
-                  <th style={{ padding: '4px 8px' }}>E_Grid (kWh)</th>
+                  <th style={{ padding: '4px 8px' }}>{t('dash.kpi_rdcac')}</th>
+                  <th style={{ padding: '4px 8px' }}>{t('dash.col_egrid')}</th>
                   <th style={{ padding: '4px 8px' }}>PR</th>
                 </tr>
               </thead>
@@ -150,7 +152,7 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
                     <td style={{ padding: '4px 8px' }}>{s.N_s}s×{s.N_strings}str</td>
                     <td style={{ padding: '4px 8px' }}>{s.P_nom_stc_kWp}</td>
                     <td style={{ padding: '4px 8px' }}>{s.R_DC_AC}</td>
-                    <td style={{ padding: '4px 8px' }}>{s.E_grid_anual_kWh?.toLocaleString('pt-BR')}</td>
+                    <td style={{ padding: '4px 8px' }}>{s.E_grid_anual_kWh?.toLocaleString(locale)}</td>
                     <td style={{ padding: '4px 8px' }}>{s.PR_pct}%</td>
                   </tr>
                 ))}
@@ -163,7 +165,7 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
       {is_plant && (
         <>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-sub)', margin: '8px 2px 4px' }}>
-            Usina — distribuição de saída agregada (soma dos inversores)
+            {t('dash.usina_dist')}
           </p>
           <PowerHistogramChart resultado={resultado} />
         </>
@@ -189,11 +191,11 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
                 display: 'inline-block', transition: 'transform 0.15s',
                 transform: colapsado ? 'rotate(-90deg)' : 'rotate(0deg)',
               }}>▾</span>
-              <strong style={{ color: 'var(--text-main, #e2e8f0)' }}>Sub-arranjo {s.idx}</strong>
+              <strong style={{ color: 'var(--text-main, #e2e8f0)' }}>{t('dash.sub', { n: s.idx })}</strong>
               <span>— {s.inversor_nome} · {s.modulo_nome}
-                {s.input_params && ` · ${s.input_params.tilt}° incl. / ${s.input_params.az}° az.`}</span>
+                {s.input_params && ` · ${t('dash.incl_az', { tilt: s.input_params.tilt, az: s.input_params.az })}`}</span>
               <span style={{ marginLeft: 'auto', fontSize: '0.74rem', opacity: 0.7 }}>
-                {colapsado ? 'expandir' : 'recolher'}
+                {colapsado ? t('dash.expandir') : t('dash.recolher')}
               </span>
             </button>
             {!colapsado && (

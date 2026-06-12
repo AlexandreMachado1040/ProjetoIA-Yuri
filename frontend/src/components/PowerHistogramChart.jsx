@@ -3,6 +3,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
   ReferenceArea, Label,
 } from 'recharts'
+import { useI18n } from '../i18n.jsx'
 
 // Critério PVSyst: 0–0.2% ótimo, 0.2–3% aceitável, >3% subdimensionado
 function clipColor(pct) {
@@ -12,14 +13,14 @@ function clipColor(pct) {
   return '#ef4444'
 }
 
-function clipLabel(pct) {
+function clipLabelKey(pct) {
   const v = parseFloat(pct)
-  if (v <= 0.2) return 'ótimo'
-  if (v <= 3.0) return 'aceitável'
-  return 'inversor subdimensionado'
+  if (v <= 0.2) return 'hist.otimo'
+  if (v <= 3.0) return 'hist.aceitavel'
+  return 'hist.subdim'
 }
 
-function CustomTooltip({ active, payload, label, P_nom_DC }) {
+function CustomTooltip({ active, payload, label, P_nom_DC, t }) {
   if (!active || !payload?.length) return null
   const grid    = payload.find(p => p.dataKey === 'grid')?.value ?? 0
   const loss    = payload.find(p => p.dataKey === 'loss')?.value ?? 0
@@ -32,11 +33,11 @@ function CustomTooltip({ active, payload, label, P_nom_DC }) {
       borderRadius: 6, padding: '8px 12px', fontSize: 12,
     }}>
       <p style={{ color: '#94a3b8', marginBottom: 4 }}>
-        P_DC: {label} kW {clipped ? <span style={{ color: '#ef4444' }}>⚠ clipping</span> : ''}
+        P_DC: {label} kW {clipped ? <span style={{ color: '#ef4444' }}>{t('hist.clipping')}</span> : ''}
       </p>
       <p style={{ color: '#00C8FF' }}>E_Grid: {grid.toFixed(0)} kWh</p>
       <p style={{ color: clipped ? '#ef4444' : '#f97316' }}>
-        Perda {clipped ? 'clipping+inv.' : 'inversor'}: {loss.toFixed(0)} kWh ({pct}%)
+        {clipped ? t('hist.perda_tt_clip') : t('hist.perda_tt_inv')}: {loss.toFixed(0)} kWh ({pct}%)
       </p>
       <p style={{ color: '#e2e8f0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 4, paddingTop: 4 }}>
         E_Array: {arr.toFixed(0)} kWh
@@ -46,6 +47,7 @@ function CustomTooltip({ active, payload, label, P_nom_DC }) {
 }
 
 export default function PowerHistogramChart({ resultado }) {
+  const { t } = useI18n()
   const {
     hist_power_bins, hist_power_arr, hist_power_grid,
     P_nom_stc_kWp, P_nom_AC_kW, P_nom_DC_kW, R_DC_AC, eta_inv_max_pct,
@@ -78,11 +80,11 @@ export default function PowerHistogramChart({ resultado }) {
   const xMax  = Math.ceil(maxKW * 1.08 / 10) * 10
 
   const color = clipColor(clipPct)
-  const label = clipLabel(clipPct)
+  const label = t(clipLabelKey(clipPct))
 
   return (
     <div className="chart-card">
-      <h3>Distribuição de Saída do Inversor</h3>
+      <h3>{t('hist.titulo')}</h3>
 
       {/* Subtitle estilo PVSyst */}
       <p className="chart-sub">
@@ -92,7 +94,7 @@ export default function PowerHistogramChart({ resultado }) {
         {P_dc && <> &nbsp;·&nbsp; Pnom DC: <strong>{P_dc} kW</strong></>}
         {rDC  && <> &nbsp;·&nbsp; R DC/AC: <strong>{rDC}</strong></>}
         &nbsp;·&nbsp;
-        Perda overload:&nbsp;
+        {t('hist.overload')}&nbsp;
         <strong style={{ color }}>{clipPct}%</strong>
         &nbsp;
         <span style={{
@@ -113,7 +115,7 @@ export default function PowerHistogramChart({ resultado }) {
             tick={{ fontSize: 11 }}
             tickFormatter={v => v === 0 ? '0' : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : Math.round(v).toString()}
           >
-            <Label value="Potência DC [kW]" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
+            <Label value={t('hist.pdc')} position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
           </XAxis>
 
           <YAxis
@@ -122,7 +124,7 @@ export default function PowerHistogramChart({ resultado }) {
             label={{ value: 'kWh', angle: -90, position: 'insideLeft', offset: 10, fill: '#94a3b8', fontSize: 11 }}
           />
 
-          <Tooltip content={<CustomTooltip P_nom_DC={P_dc} />} />
+          <Tooltip content={<CustomTooltip P_nom_DC={P_dc} t={t} />} />
           <Legend verticalAlign="top" />
 
           {/* Zona de clipping — acima do Pnom DC */}
@@ -153,14 +155,14 @@ export default function PowerHistogramChart({ resultado }) {
           )}
 
           {/* E_Grid — base da barra */}
-          <Bar dataKey="grid" name="E_Grid (AC)" stackId="a" radius={[0,0,2,2]}>
+          <Bar dataKey="grid" name={t('hist.egrid_ac')} stackId="a" radius={[0,0,2,2]}>
             {data.map((d, i) => (
               <Cell key={i} fill="#00C8FF" />
             ))}
           </Bar>
 
           {/* Perda — topo da barra: laranja (eficiência) ou vermelho (clipping) */}
-          <Bar dataKey="loss" name="Perda inversor" stackId="a" radius={[3,3,0,0]} opacity={0.85}>
+          <Bar dataKey="loss" name={t('hist.perda_inv')} stackId="a" radius={[3,3,0,0]} opacity={0.85}>
             {data.map((d, i) => (
               <Cell key={i} fill={P_dc && d.kW > P_dc ? '#ef4444' : '#f97316'} />
             ))}
@@ -172,11 +174,11 @@ export default function PowerHistogramChart({ resultado }) {
       <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: '0.72rem', color: 'var(--text-sub)', flexWrap: 'wrap' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span style={{ width: 12, height: 12, borderRadius: 2, background: '#f97316', display: 'inline-block' }} />
-          Perda de eficiência (P_DC ≤ Pnom DC)
+          {t('hist.perda_ef')}
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span style={{ width: 12, height: 12, borderRadius: 2, background: '#ef4444', display: 'inline-block' }} />
-          Perda de clipping (P_DC &gt; Pnom DC)
+          {t('hist.perda_clip')}
         </span>
       </div>
     </div>

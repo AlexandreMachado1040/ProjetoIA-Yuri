@@ -2,13 +2,13 @@ import {
   ComposedChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ReferenceLine, ResponsiveContainer, Cell,
 } from 'recharts'
-
-const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+import { useI18n } from '../i18n.jsx'
 
 // Paleta para empilhar sub-arranjos
 const CORES_SA = ['#00C8FF', '#10b981', '#f59e0b', '#a855f7', '#ef4444', '#0077EE', '#14b8a6', '#eab308']
 
 export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh, subarrays }) {
+  const { t, meses: MESES } = useI18n()
   // ── Modo planta: barras empilhadas por sub-arranjo ──────────────────────────
   if (subarrays?.length > 0) {
     const data = MESES.map((m, i) => {
@@ -25,7 +25,7 @@ export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh, sub
 
     return (
       <div className="chart-card">
-        <h3>Produção Mensal por Sub-arranjo (MWh — E_Grid)</h3>
+        <h3>{t('prod.titulo_sa')}</h3>
         <ResponsiveContainer width="100%" height={280}>
           <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
@@ -34,7 +34,7 @@ export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh, sub
             <Tooltip formatter={(v, n) => [`${v} MWh`, n]} />
             <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
             <ReferenceLine y={+media.toFixed(2)} stroke="#f59e0b" strokeDasharray="5 3"
-              label={{ value: `Média ${media.toFixed(2)} MWh`, position: 'right', fontSize: 11, fill: '#f59e0b' }} />
+              label={{ value: t('prod.media', { v: media.toFixed(2) }), position: 'right', fontSize: 11, fill: '#f59e0b' }} />
             {subarrays.map((s, k) => (
               <Bar
                 key={s.idx}
@@ -66,7 +66,7 @@ export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh, sub
 
   return (
     <div className="chart-card">
-      <h3>Produção Mensal (MWh)</h3>
+      <h3>{t('prod.titulo')}</h3>
       <ResponsiveContainer width="100%" height={260}>
         <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" />
@@ -75,12 +75,12 @@ export default function ProducaoMensalChart({ monthlyGridKwh, monthlyArrKwh, sub
           <Tooltip formatter={v => [`${v} MWh`]} />
           <Legend />
           <ReferenceLine y={+media.toFixed(2)} stroke="#f59e0b" strokeDasharray="5 3"
-                         label={{ value: `Média ${media.toFixed(2)} MWh`, position: 'right',
+                         label={{ value: t('prod.media', { v: media.toFixed(2) }), position: 'right',
                                   fontSize: 11, fill: '#f59e0b' }} />
           {arrMwh && (
-            <Bar dataKey="arr" name="E_Array (DC)" fill="#0077EE" radius={[3,3,0,0]} />
+            <Bar dataKey="arr" name={t('prod.earr')} fill="#0077EE" radius={[3,3,0,0]} />
           )}
-          <Bar dataKey="grid" name="E_Grid (rede AC)" radius={[3,3,0,0]}>
+          <Bar dataKey="grid" name={t('prod.egrid')} radius={[3,3,0,0]}>
             {data.map((d, i) => (
               <Cell key={i} fill={d.grid >= media ? '#00C8FF' : '#005FFF'} />
             ))}

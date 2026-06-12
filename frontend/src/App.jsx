@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import ConfigForm from './components/ConfigForm'
 import ResultsDashboard from './components/ResultsDashboard'
 import { submitSimulacao, prewarm } from './api/client'
+import { useI18n, IDIOMAS } from './i18n.jsx'
 import './App.css'
 
 // Versão da aplicação (exibida no cabeçalho). Atualizar a cada release.
 const APP_VERSION = 'v3.0'
 
 export default function App() {
+  const { t, lang, setLang } = useI18n()
   const [resultado, setResultado] = useState(null)
   const [payloadAtual, setPayloadAtual] = useState(null)
   const [loading, setLoading]     = useState(false)
@@ -31,8 +33,8 @@ export default function App() {
       const semResposta = !e?.response
       const msg = e?.response?.data?.error
         ?? (semResposta
-            ? 'Não foi possível contatar o servidor (o motor pode estar reiniciando). Aguarde alguns segundos e tente novamente.'
-            : (e?.message ?? 'Erro ao executar simulação.'))
+            ? t('app.erro_servidor')
+            : (e?.message ?? t('app.erro_simulacao')))
       setErro(msg)
     } finally {
       setLoading(false)
@@ -57,15 +59,31 @@ export default function App() {
           </svg>
           <div className="header-text">
             <h1>Aurova <span>Motor Solar {APP_VERSION}</span></h1>
-            <p>Simulação fotovoltaica bifacial com Ray-Tracing 2D</p>
+            <p>{t('app.subtitulo')}</p>
           </div>
         </div>
-        <button
-          className="btn-sidebar-toggle"
-          onClick={() => setSidebarOpen(o => !o)}
-        >
-          {sidebarOpen ? '✕ Fechar' : '⚙ Parâmetros'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.10)', borderRadius: 7, padding: 2 }}>
+            {IDIOMAS.map(i => (
+              <button key={i.id} type="button" onClick={() => setLang(i.id)}
+                style={{
+                  background: lang === i.id ? 'rgba(0,95,255,0.35)' : 'transparent',
+                  border: 'none', borderRadius: 5, padding: '3px 9px',
+                  color: lang === i.id ? '#fff' : 'var(--text-sub, #94a3b8)',
+                  fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer',
+                }}>
+                {i.rotulo}
+              </button>
+            ))}
+          </div>
+          <button
+            className="btn-sidebar-toggle"
+            onClick={() => setSidebarOpen(o => !o)}
+          >
+            {sidebarOpen ? t('app.fechar') : t('app.parametros')}
+          </button>
+        </div>
       </header>
 
       <main className="app-main">
@@ -77,13 +95,13 @@ export default function App() {
           {erro && <div className="error-banner">{erro}</div>}
           {loading && (
             <div className="empty-state">
-              <p>Simulando… aguarde.</p>
+              <p>{t('app.simulando')}</p>
             </div>
           )}
           {resultado && <ResultsDashboard resultado={resultado} inputPayload={payloadAtual} />}
           {!resultado && !loading && !erro && (
             <div className="empty-state">
-              <p>Preencha os parâmetros e clique em <strong>Simular</strong> para iniciar.</p>
+              <p>{t('app.vazio_1')}<strong>{t('form.simular')}</strong>{t('app.vazio_2')}</p>
             </div>
           )}
         </section>

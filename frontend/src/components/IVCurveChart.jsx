@@ -2,6 +2,7 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea, Label,
 } from 'recharts'
+import { useI18n } from '../i18n.jsx'
 
 // ── Constantes físicas ────────────────────────────────────────────────────────
 const kB  = 1.38064852e-23    // J/K
@@ -139,6 +140,7 @@ export default function IVCurveChart({ resultado }) {
 }
 
 function IVCurveChartInner({ resultado }) {
+  const { t } = useI18n()
   const { modulo_elec: mod, inversor_elec: inv, N_s, N_strings } = resultado ?? {}
   if (!mod || !inv || !N_s || !mod.Iph_ref || !mod.Rsh) return null
 
@@ -163,7 +165,7 @@ function IVCurveChartInner({ resultado }) {
 
   return (
     <div className="chart-card">
-      <h3>Curva I-V — Dimensionamento de Tensão</h3>
+      <h3>{t('iv.titulo')}</h3>
 
       {/* Badges de validação */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
@@ -171,7 +173,7 @@ function IVCurveChartInner({ resultado }) {
           fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase',
           letterSpacing: '0.06em', color: allOk ? '#10b981' : '#ef4444', marginRight: 4,
         }}>
-          {allOk ? 'Dimensionamento OK' : 'Verificar dimensionamento'}
+          {allOk ? t('iv.ok') : t('iv.verificar')}
         </span>
         <Check ok={okVoc}
           label={`Voc(−10°C) = ${Voc_safety} V ≤ V_dc_max ${inv.V_dc_max} V`} />
@@ -187,12 +189,12 @@ function IVCurveChartInner({ resultado }) {
 
           <XAxis type="number" dataKey="V" name="Tensão" unit=" V"
                  domain={[0, maxV]} tickCount={9} tick={{ fontSize: 11 }}>
-            <Label value="Tensão [V]" position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
+            <Label value={t('iv.tensao')} position="insideBottom" offset={-20} fill="#94a3b8" fontSize={12} />
           </XAxis>
 
           <YAxis type="number" dataKey="I" name="Corrente" unit=" A"
                  domain={[0, maxI]} tick={{ fontSize: 11 }}>
-            <Label value="Corrente [A]" angle={-90} position="insideLeft" offset={10} fill="#94a3b8" fontSize={12} />
+            <Label value={t('iv.corrente')} angle={-90} position="insideLeft" offset={10} fill="#94a3b8" fontSize={12} />
           </YAxis>
 
           <Tooltip cursor={{ strokeDasharray: '3 3' }}
@@ -249,7 +251,7 @@ function IVCurveChartInner({ resultado }) {
       }}>
         <thead>
           <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-            {['Temperatura', 'Voc', 'Vmpp', 'Pmpp', 'Isc'].map((h, i) => (
+            {[t('iv.temperatura'), 'Voc', 'Vmpp', 'Pmpp', 'Isc'].map((h, i) => (
               <th key={h} style={{
                 padding: '4px 10px', color: 'var(--text-muted)',
                 fontWeight: 600, textAlign: i === 0 ? 'left' : 'right',
