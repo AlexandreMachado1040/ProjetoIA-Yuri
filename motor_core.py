@@ -629,7 +629,8 @@ def simulate_fast(params: dict) -> dict:
     nasa_override = params.get('nasa_data')
     if nasa_override:
         nasa = nasa_override
-        nasa_source = 'NASA POWER (ao vivo)'
+        # Rótulo alternativo quando a irradiância vem de outra fonte (ex.: TGY SONDA)
+        nasa_source = params.get('nasa_source_label') or 'NASA POWER (ao vivo)'
     else:
         live = fetch_nasa_power_all(lat, lon)
         if live:
@@ -963,7 +964,8 @@ def simulate_plant(params: dict) -> dict:
 
     # Chaves compartilhadas/globais propagadas a cada sub-arranjo
     _shared_keys = (
-        'lat', 'lon', 'tz', 'nasa_data', 'N_seg', 'N_rays', 'albedo', 'vento_ms',
+        'lat', 'lon', 'tz', 'nasa_data', 'nasa_source_label',
+        'N_seg', 'N_rays', 'albedo', 'vento_ms',
         'perda_cabo_cc_pct', 'perda_sujidade_pct', 'perda_sujidade_mensal',
         'tipo_montagem', 'Uc', 'Uv',
         'degradacao_anual_pct', 'ano_operacao', 'vida_util_anos',
@@ -1278,7 +1280,8 @@ def simulate_daily(params: dict) -> dict:
     """Análise diária: E_Grid total de cada dia do ano (365) + perfil horário de
     cada dia (365×24). Soma sub-arranjos quando há lista 'subarrays'."""
     if params.get('subarrays'):
-        shared_keys = ('lat', 'lon', 'tz', 'nasa_data', 'N_seg', 'N_rays', 'albedo',
+        shared_keys = ('lat', 'lon', 'tz', 'nasa_data', 'nasa_source_label',
+                       'N_seg', 'N_rays', 'albedo',
                        'vento_ms', 'perda_cabo_cc_pct', 'perda_sujidade_pct',
                        'perda_sujidade_mensal', 'tipo_montagem', 'Uc', 'Uv',
                        'degradacao_anual_pct', 'ano_operacao')

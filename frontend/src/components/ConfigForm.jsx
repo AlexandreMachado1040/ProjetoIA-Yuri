@@ -27,6 +27,32 @@ const SUBARRAY_DEFAULT = {
   mod_height: 2.0,
 }
 
+// Estações SONDA/INPE com TGY pré-processado (gerado por sonda_tgy_pipeline.py).
+// O TGY entra como fonte de irradiância medida quando o projeto está próximo.
+const ESTACOES_SONDA = [
+  { sigla: 'BRB', nome: 'Brasília-DF', lat: -15.601, lon: -47.713, arquivo: '/sonda/BRB_TGY.json' },
+]
+const RAIO_SONDA_KM = 100
+
+function distanciaKm(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180
+  const a = Math.sin((lat2 - lat1) * r / 2) ** 2 +
+            Math.cos(lat1 * r) * Math.cos(lat2 * r) *
+            Math.sin((lon2 - lon1) * r / 2) ** 2
+  return 12742 * Math.asin(Math.sqrt(a))
+}
+
+// Cache do TGY por arquivo (84 kB; baixa uma vez por sessão)
+const _tgyCache = {}
+async function carregarTGY(arquivo) {
+  if (!_tgyCache[arquivo]) {
+    const resp = await fetch(arquivo)
+    if (!resp.ok) throw new Error(`TGY HTTP ${resp.status}`)
+    _tgyCache[arquivo] = await resp.json()
+  }
+  return _tgyCache[arquivo]
+}
+
 // Tipos de montagem térmica (U-value PVSyst) — espelha MONTAGEM_PRESETS do motor.
 const MONTAGENS = [
   { id: 'livre',     label: 'Estrutura livre (ventilada) — Uc 29' },
@@ -42,6 +68,18 @@ export default function ConfigForm({ onSubmit, loading }) {
   const [subarrays,  setSubarrays]  = useState([{ ...SUBARRAY_DEFAULT }])
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [catalogError,   setCatalogError]   = useState(false)
+
+  // Fonte de irradiância: 'nasa' (padrão) ou 'sonda' (TGY medido em solo).
+  // Só oferecida quando o local está a até RAIO_SONDA_KM de uma estação.
+  const [fonteIrr, setFonteIrr] = useState('nasa')
+  const estacaoProxima = ESTACOES_SONDA
+    .map(e => ({ ...e, dist: distanciaKm(form.lat, form.lon, e.lat, e.lon) }))
+    .filter(e => e.dist <= RAIO_SONDA_KM)
+    .sort((a, b) => a.dist - b.dist)[0] ?? null
+
+  useEffect(() => {
+    if (!estacaoProxima && fonteIrr !== 'nasa') setFonteIrr('nasa')
+  }, [estacaoProxima, fonteIrr])
 
   const loadCatalog = useCallback(() => {
     setCatalogLoading(true)
@@ -99,7 +137,7 @@ export default function ConfigForm({ onSubmit, loading }) {
   }
 
   // ── Submit ──────────────────────────────────────────────────────────────
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const anyBifacial = subarrays.some(s => s.bifacial)
     const base = {
@@ -111,6 +149,22 @@ export default function ConfigForm({ onSubmit, loading }) {
       tipo_montagem: form.tipo_montagem,
       degradacao_anual_pct: form.degradacao_anual_pct,
       ano_operacao: form.ano_operacao,
+    }
+
+    // Fonte SONDA: anexa os agregados mensais do TGY da estação próxima.
+    // Em caso de falha no carregamento, segue com a NASA (sem bloquear).
+    if (fonteIrr === 'sonda' && estacaoProxima) {
+      try {
+        const tgy = await carregarTGY(estacaoProxima.arquivo)
+        base.sonda_tgy = {
+          estacao: tgy.estacao,
+          ghi: tgy.ghi_mensal_kwh_dia,
+          dni: tgy.dni_mensal_kwh_dia,
+          dhi: tgy.dhi_mensal_kwh_dia,
+        }
+      } catch (err) {
+        console.warn('TGY SONDA indisponível, usando NASA POWER:', err)
+      }
     }
 
     if (subarrays.length === 1) {
@@ -163,6 +217,30 @@ export default function ConfigForm({ onSubmit, loading }) {
         {field('Latitude (°)', 'lat')}
         {field('Longitude (°)', 'lon')}
         {field('Fuso horário (UTC)', 'tz', 'number', 1)}
+
+        {estacaoProxima && (
+          <>
+            <label className="field">
+              <span>Fonte de irradiância</span>
+              <select value={fonteIrr} onChange={e => setFonteIrr(e.target.value)}>
+                <option value="nasa">NASA POWER (satélite — padrão)</option>
+                <option value="sonda">
+                  SONDA {estacaoProxima.sigla} — medido em solo (TGY)
+                </option>
+              </select>
+            </label>
+            {fonteIrr === 'sonda' && (
+              <p style={{
+                fontSize: '0.72rem', color: 'var(--text-sub, #8b95c0)',
+                margin: '2px 2px 8px', lineHeight: 1.5,
+              }}>
+                Ano típico (TGY) montado de medições minuto a minuto da estação{' '}
+                {estacaoProxima.nome} ({estacaoProxima.dist.toFixed(0)} km do local) —
+                SONDA/INPE, CC BY 4.0. Temperatura permanece da NASA POWER.
+              </p>
+            )}
+          </>
+        )}
       </section>
 
       {catalogError && (

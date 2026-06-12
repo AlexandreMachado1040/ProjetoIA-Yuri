@@ -160,6 +160,24 @@ async def on_fetch(request, env):
                 nasa_data = None
                 _nasa_err = f"{type(e).__name__}: {e}"
 
+            # Fonte alternativa de irradiância: TGY SONDA (medições de solo).
+            # O frontend envia os agregados mensais ghi/dni/dhi do TGY da
+            # estação; t2m permanece da NASA POWER (o SONDA/BRB não mede).
+            sonda_label = None
+            sonda = body.get("sonda_tgy")
+            if sonda:
+                try:
+                    tgy = {k: {int(m): float(v) for m, v in dict(sonda[k]).items()}
+                           for k in ("ghi", "dni", "dhi")}
+                    if all(len(tgy[k]) == 12 for k in tgy):
+                        t2m = ((nasa_data or {}).get("t2m")
+                               or {m: 22.0 for m in range(1, 13)})
+                        nasa_data = {**tgy, "t2m": t2m}
+                        est = str(sonda.get("estacao", "")).strip()
+                        sonda_label = f"SONDA/INPE TGY {est} (medido)".replace("  ", " ")
+                except Exception:
+                    sonda_label = None   # TGY malformado → segue só com NASA
+
             params = {
                 "lat":        lat,
                 "lon":        lon,
@@ -185,6 +203,7 @@ async def on_fetch(request, env):
                 "modulo":     mod,
                 "inversor":   inv,
                 "nasa_data":  nasa_data,   # None → simulate_fast usa fallback SP
+                "nasa_source_label": sonda_label,   # None → rótulo padrão NASA
             }
 
             # Múltiplos sub-arranjos? Resolve cada um e usa simulate_plant.

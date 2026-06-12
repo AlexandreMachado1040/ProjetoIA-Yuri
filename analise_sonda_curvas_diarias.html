@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Análise Técnica — sonda_curvas_diarias.html · Aurova Motor</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #10142a;
+  --surface:   #181d3a;
+  --panel:     #1f2547;
+  --border:    #2e3663;
+  --blue:      #005FFF;
+  --blue-soft: #5b8cff;
+  --teal:      #00d4ff;
+  --gold:      #f5a623;
+  --red:       #ef5350;
+  --green:     #34d399;
+  --muted:     #8b95c0;
+  --text:      #ccd6f6;
+  --white:     #eef2ff;
+  --mono:      'Cascadia Code', 'Courier New', monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.wrap { max-width: 920px; margin: 0 auto; padding: 40px 28px 80px; }
+
+/* ── Cabeçalho ── */
+header {
+  border-bottom: 3px solid var(--blue);
+  padding-bottom: 22px;
+  margin-bottom: 36px;
+}
+.kicker {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--blue-soft);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+h1 {
+  font-size: 28px;
+  color: var(--white);
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+h1 code { font-family: var(--mono); font-size: 24px; color: var(--teal); }
+.meta {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.meta strong { color: var(--text); font-weight: 600; }
+
+/* ── Veredito ── */
+.verdict {
+  background: linear-gradient(135deg, rgba(0,95,255,0.14), rgba(0,212,255,0.07));
+  border: 1px solid rgba(0,95,255,0.45);
+  border-left: 5px solid var(--blue);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 40px;
+}
+.verdict .v-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--blue-soft);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.verdict p { color: var(--white); font-size: 16px; }
+.verdict strong { color: var(--teal); }
+
+/* ── Seções ── */
+section { margin-bottom: 44px; }
+h2 {
+  font-size: 20px;
+  color: var(--white);
+  font-weight: 700;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.num {
+  background: var(--blue);
+  color: #fff;
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+h3 { font-size: 15.5px; color: var(--white); margin: 18px 0 8px; }
+p { margin-bottom: 12px; }
+em { color: var(--gold); font-style: normal; }
+code {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: rgba(0,212,255,0.08);
+  border: 1px solid rgba(0,212,255,0.18);
+  color: var(--teal);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ── Tabelas ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0 18px;
+  font-size: 13.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+th {
+  background: var(--panel);
+  color: var(--blue-soft);
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+td {
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+}
+td:first-child { color: var(--white); font-weight: 600; white-space: nowrap; }
+
+/* ── Cartões pró/contra ── */
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+@media (max-width: 720px) { .cards { grid-template-columns: 1fr; } }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+.card.good { border-top: 3px solid var(--green); }
+.card.bad  { border-top: 3px solid var(--red); }
+.card .c-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+.card.good .c-title { color: var(--green); }
+.card.bad  .c-title { color: var(--red); }
+.card ul { list-style: none; }
+.card li {
+  padding: 5px 0 5px 22px;
+  position: relative;
+  font-size: 13.5px;
+}
+.card.good li::before { content: '✓'; color: var(--green); position: absolute; left: 0; font-weight: 700; }
+.card.bad  li::before { content: '✕'; color: var(--red);   position: absolute; left: 0; font-weight: 700; }
+
+/* ── Alerta ── */
+.alert {
+  background: rgba(239,83,80,0.09);
+  border: 1px solid rgba(239,83,80,0.35);
+  border-left: 5px solid var(--red);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 18px 0;
+}
+.alert .a-title { color: var(--red); font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+.alert p { font-size: 14px; margin-bottom: 6px; }
+.alert p:last-child { margin-bottom: 0; }
+
+/* ── Plano de implementação ── */
+.steps { counter-reset: passo; margin: 16px 0; }
+.step {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px 16px 64px;
+  margin-bottom: 12px;
+  position: relative;
+  counter-increment: passo;
+}
+.step::before {
+  content: counter(passo);
+  position: absolute;
+  left: 18px; top: 16px;
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: rgba(0,95,255,0.18);
+  border: 1px solid rgba(0,95,255,0.5);
+  color: var(--blue-soft);
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.step h4 { color: var(--white); font-size: 14.5px; margin-bottom: 4px; }
+.step p { font-size: 13.5px; margin-bottom: 0; color: var(--muted); }
+.step .tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+.tag.backend  { background: rgba(245,166,35,0.15); color: var(--gold);  border: 1px solid rgba(245,166,35,0.35); }
+.tag.frontend { background: rgba(0,212,255,0.12);  color: var(--teal);  border: 1px solid rgba(0,212,255,0.3); }
+
+/* ── Quote ── */
+blockquote {
+  border-left: 4px solid var(--gold);
+  background: rgba(245,166,35,0.07);
+  padding: 12px 18px;
+  border-radius: 0 8px 8px 0;
+  margin: 14px 0;
+  font-size: 14px;
+  color: var(--gold);
+  font-family: var(--mono);
+}
+
+/* ── Rodapé ── */
+footer {
+  margin-top: 56px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── Impressão ── */
+@media print {
+  :root { --bg: #fff; --surface: #f6f8fc; --panel: #eef2fa; --border: #c9d4ea;
+          --text: #1e293b; --white: #0f172a; --muted: #56627e;
+          --blue-soft: #1d4ed8; --teal: #0369a1; --gold: #92600a;
+          --green: #047857; --red: #b91c1c; }
+  body { font-size: 12px; }
+  .wrap { max-width: none; padding: 0; }
+  @page { size: A4 portrait; margin: 14mm; }
+  section, .card, .step, .verdict, .alert, table { break-inside: avoid; }
+  * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Aurova Motor Solar · Avaliação técnica</div>
+  <h1>Análise — <code>sonda_curvas_diarias.html</code></h1>
+  <div class="meta">
+    <span><strong>Data:</strong> 11/06/2026</span>
+    <span><strong>Arquivo:</strong> 51,5 kB · 1.429 linhas · página única</span>
+    <span><strong>Objetivo:</strong> decidir se/como integrar ao Aurova Motor</span>
+  </div>
+</header>
+
+<div class="verdict">
+  <div class="v-title">Veredito</div>
+  <p>O HTML é um <strong>excelente protótipo de UX</strong> com um <strong>motor de dados descartável</strong>:
+  as curvas são 100% sintéticas, geradas no navegador. A recomendação é <strong>portar a experiência
+  (explorador de dia a dia, calendário, KPIs, HSP), não o código</strong> — reconstruindo a tela em
+  React/Recharts alimentada pelos dados reais do nosso Worker. <em>Adendo (seção 5):</em> verificado o
+  repositório do SONDA/INPE, a integração de dados medidos sobe para "viável como fase 2" via
+  pré-processamento offline — sem alterar a recomendação principal.</p>
+</div>
+
+<!-- ══════════════ 1. STACK ══════════════ -->
+<section>
+  <h2><span class="num">1</span> Stack e construção</h2>
+  <p>Página única autocontida, sem framework e sem etapa de build:</p>
+  <table>
+    <tr><th>Camada</th><th>Tecnologia</th><th>Observação</th></tr>
+    <tr>
+      <td>UI</td>
+      <td>HTML + CSS puro</td>
+      <td>Variáveis CSS, flexbox/grid, tema escuro; visual de aplicativo desktop (menubar, toolbar, sidebar, statusbar)</td>
+    </tr>
+    <tr>
+      <td>Gráfico</td>
+      <td>Chart.js 4.4.1 via CDN</td>
+      <td>Única dependência externa; linha com 2 eixos Y, área, tracejado, tooltip customizado</td>
+    </tr>
+    <tr>
+      <td>Lógica</td>
+      <td>JavaScript vanilla</td>
+      <td>Funções globais e <code>onclick</code> inline; estado em variáveis soltas</td>
+    </tr>
+    <tr>
+      <td>Dados</td>
+      <td>Sintéticos, gerados no navegador</td>
+      <td>PRNG (LCG + Box-Muller) com semente fixa por dia + climatologia mensal de Brasília embutida</td>
+    </tr>
+  </table>
+  <p><strong>Funcionalidades implementadas:</strong> navegação por dia/mês (botões, seletores, minicalendário
+  clicável e setas do teclado), toggles de curvas (GHI / DNI / DHI / Temperatura / Céu limpo), KPIs do dia
+  (totais, <em>HSP</em>, temperatura e vento médios, pico e hora do pico), estatísticas do mês, tabela horária
+  e exportação CSV.</p>
+</section>
+
+<!-- ══════════════ 2. DADOS FALSOS ══════════════ -->
+<section>
+  <h2><span class="num">2</span> Ponto crítico: os dados são falsos</h2>
+  <p>Apesar do título "SONDA/INPE — Estação BRB", <strong>a página não carrega nenhum dado real do SONDA</strong>.
+  Tudo vem de um gerador pseudoaleatório sobre um modelo físico simplificado:</p>
+  <table>
+    <tr><th>Componente</th><th>O que faz</th><th>Avaliação</th></tr>
+    <tr>
+      <td>Geometria solar</td>
+      <td>Declinação, ângulo horário, cosseno do zênite</td>
+      <td>Correta, mas básica</td>
+    </tr>
+    <tr>
+      <td>Irradiância</td>
+      <td>Beer-Lambert genérico com fator arbitrário <code>kt × 1,3</code> e tetos fixos (GHI ≤ 1200, DNI ≤ 1000 W/m²)</td>
+      <td><em>Menos rigorosa que o nosso motor</em> (Spencer + Collares-Pereira + Erbs + Hay &amp; Davies)</td>
+    </tr>
+    <tr>
+      <td>Nuvens / chuva</td>
+      <td>Sorteio: 25% de chance de "chuva" na estação chuvosa, autocorrelação horária 0,8</td>
+      <td>Plausível visualmente, sem base em medição</td>
+    </tr>
+    <tr>
+      <td>Climatologia</td>
+      <td>Constantes mensais de kt, temperatura e vento de Brasília fixas no código</td>
+      <td>Só vale para BRB; não acompanha a localização do usuário</td>
+    </tr>
+  </table>
+  <div class="alert">
+    <div class="a-title">⚠ O próprio CSV exportado admite a origem sintética</div>
+    <blockquote># Modelo físico: dados sintéticos baseados em climatologia BRB 2018</blockquote>
+    <p>Manter o selo "SONDA/INPE" sem usar dados do SONDA seria enganoso num produto que se propõe profissional.</p>
+  </div>
+</section>
+
+<!-- ══════════════ 3. PRÓS E CONTRAS ══════════════ -->
+<section>
+  <h2><span class="num">3</span> O que aproveitar e o que descartar</h2>
+  <div class="cards">
+    <div class="card good">
+      <div class="c-title">Vale a pena portar</div>
+      <ul>
+        <li>Conceito de "explorador de dia a dia" com minicalendário</li>
+        <li>KPI de <strong>HSP</strong> (hoje não mostramos no dashboard)</li>
+        <li>Toggles de curva GHI / DNI / DHI / Temperatura</li>
+        <li>Curva de céu limpo como referência visual</li>
+        <li>Tabela horária + estatísticas do mês</li>
+        <li>Navegação por teclado (setas)</li>
+        <li>Paleta escura compatível com o nosso tema</li>
+      </ul>
+    </div>
+    <div class="card bad">
+      <div class="c-title">Não importar</div>
+      <ul>
+        <li>Gerador sintético — temos dados reais (NASA POWER) e decomposição horária real no Worker</li>
+        <li>Chart.js — somos React + Recharts; 2ª lib de gráfico custa ~200 kB e duplica padrões</li>
+        <li>Página estática separada — viraria uma ilha desconectada da simulação do usuário</li>
+        <li>Marca "SONDA/INPE" sem dados do SONDA</li>
+        <li>Climatologia fixa de Brasília</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 4. RECOMENDAÇÃO ══════════════ -->
+<section>
+  <h2><span class="num">4</span> Recomendação de implementação</h2>
+  <p>Criar um componente React <strong>"Explorador Diário"</strong> no dashboard do Aurova,
+  alimentado pelo Worker com dados reais — as curvas refletirão a localização e a configuração
+  reais do usuário, coisa que o HTML nunca faria.</p>
+  <div class="steps">
+    <div class="step">
+      <h4>Expor as séries horárias que o motor já calcula <span class="tag backend">Backend · ~1 h</span></h4>
+      <p>Estender o endpoint <code>/daily</code> (ou criar <code>/dia</code>) para devolver, para uma data
+      escolhida: GHI, DNI, DHI, GHI de céu limpo e G no plano, hora a hora. Hoje essas séries existem
+      internamente (Erbs / Collares-Pereira) mas só saem agregadas.</p>
+    </div>
+    <div class="step">
+      <h4>Componente React com Recharts <span class="tag frontend">Frontend · ~3-4 h</span></h4>
+      <p>Minicalendário + navegação de dia/mês, gráfico com toggles de curvas (2 eixos Y para temperatura),
+      KPIs do dia (GHI total, HSP, pico e hora do pico) e tabela horária — no tema escuro atual.</p>
+    </div>
+    <div class="step">
+      <h4>Integração no dashboard <span class="tag frontend">Frontend</span></h4>
+      <p>Posicionar junto ao <code>DailyEgridChart</code> existente, reaproveitando o
+      <code>inputPayload</code> da simulação corrente (lat/lon, inclinação, azimute).</p>
+    </div>
+  </div>
+  <p><strong>Risco:</strong> baixo — nenhuma dependência nova.
+  <strong>Esforço total estimado:</strong> 4 a 5 horas.</p>
+</section>
+
+<!-- ══════════════ 5. COLETA SONDA ══════════════ -->
+<section>
+  <h2><span class="num">5</span> Adendo: coleta de dados reais do SONDA — a avaliação muda?</h2>
+  <p>Verificação feita em 11/06/2026 diretamente nas fontes:
+  <a href="https://sonda.ccst.inpe.br/acesso_dados.html" target="_blank" rel="noopener"
+     style="color:var(--teal);">sonda.ccst.inpe.br/acesso_dados.html</a> (catálogo de estações e licença) e
+  <a href="https://sonda.ccst.inpe.br/est_brasilia.html" target="_blank" rel="noopener"
+     style="color:var(--teal);">sonda.ccst.inpe.br/est_brasilia.html</a> (página da estação Brasília — BRB,
+  com os links de download). O acesso é <strong>mais simples do que o assumido na primeira avaliação</strong>:</p>
+  <table>
+    <tr><th>Aspecto</th><th>O que foi verificado</th></tr>
+    <tr>
+      <td>Cadastro / login</td>
+      <td>Não exigido — download direto por link</td>
+    </tr>
+    <tr>
+      <td>Formato</td>
+      <td>Arquivos <strong>ZIP por estação e mês ou ano</strong> (ex.: <code>BRB_2018_SD.zip</code>,
+      <code>BRB_2018_01_SD.zip</code>), com tabelas ASCII dentro</td>
+    </tr>
+    <tr>
+      <td>Resolução</td>
+      <td>Médias <strong>minuto a minuto</strong> (≈ 43 mil linhas/mês por estação)</td>
+    </tr>
+    <tr>
+      <td>Variáveis (BRB)</td>
+      <td>GHI, DNI, difusa, onda longa, PAR, iluminância. <em>Temperatura e vento NÃO disponíveis
+      em BRB</em> — mais uma prova de que o HTML analisado inventou essas curvas</td>
+    </tr>
+    <tr>
+      <td>Cobertura</td>
+      <td>21 estações no Brasil; BRB tem 2004-2005 e 2010-2018, <em>com lacunas</em> (cobertura não uniforme)</td>
+    </tr>
+    <tr>
+      <td>Licença</td>
+      <td>CC BY 4.0 — uso livre com atribuição, inclusive comercial</td>
+    </tr>
+    <tr>
+      <td>API</td>
+      <td>Inexistente — apenas download manual de arquivos</td>
+    </tr>
+  </table>
+
+  <h3>O que muda na avaliação</h3>
+  <p>A integração SONDA sobe de <em>"projeto à parte, não recomendado"</em> para
+  <strong>"viável como fase 2"</strong> — o acesso livre, sem cadastro e com licença CC BY 4.0 elimina as
+  barreiras de obtenção. <strong>Mas a forma de integrar é decisiva:</strong></p>
+  <div class="cards">
+    <div class="card good">
+      <div class="c-title">Caminho viável — pré-processamento offline</div>
+      <ul>
+        <li>Baixar os ZIPs uma única vez (script local, fora do Worker)</li>
+        <li>Agregar 1 minuto → horário e aplicar os flags de qualidade</li>
+        <li>Publicar JSON compacto por estação/ano como ativo estático (Pages ou R2)</li>
+        <li>No Explorador Diário: toggle "Modelo (NASA POWER)" × "Medido (SONDA)" quando a localização estiver perto de uma estação</li>
+        <li>Validação do motor contra medições de solo vira subproduto natural</li>
+      </ul>
+    </div>
+    <div class="card bad">
+      <div class="c-title">Caminho inviável — coleta em tempo de execução</div>
+      <ul>
+        <li>Worker baixando/descompactando ZIPs de vários MB a cada requisição</li>
+        <li>Parsing de ~43 mil linhas/mês dentro do limite de CPU do Worker</li>
+        <li>Sem API: nenhuma consulta pontual por data — só o arquivo inteiro</li>
+        <li>Cobertura limitada a 21 pontos não substitui o NASA POWER (global)</li>
+        <li>Lacunas e meses ausentes exigiriam fallback complexo em produção</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Conclusão revisada</h3>
+  <p>A recomendação principal <strong>continua a mesma</strong>: portar a UX com dados reais do nosso
+  motor (NASA POWER) — o SONDA não a substitui, pois cobre apenas 21 pontos e tem lacunas históricas.
+  O que muda é o destino do SONDA: deixa de ser descartado e entra como <strong>fase 2 planejável</strong>
+  (pipeline offline + ativos estáticos + toggle "medido × modelado" no Explorador Diário), com esforço
+  estimado de 1 a 2 dias e o bônus de validar o motor contra medições de solo. Com dados reais do SONDA
+  no ar, inclusive o selo "SONDA/INPE · CC BY 4.0" passaria a ser legítimo — bastando a atribuição
+  exigida pela licença.</p>
+</section>
+
+<!-- ══════════════ 6. REFERÊNCIA PVSYST TMY ══════════════ -->
+<section>
+  <h2><span class="num">6</span> Referência: como o PVSyst consome o mesmo tipo de dado (TMY)</h2>
+  <p>Avaliação da ferramenta de geração de TMY do PVSyst 7
+  (<a href="https://www.pvsyst.com/help-pvsyst7/meteo_tmy_data_generation.htm" target="_blank" rel="noopener"
+      style="color:var(--teal);">help-pvsyst7/meteo_tmy_data_generation.htm</a>), que faz exatamente o
+  consumo em questão: transformar <strong>anos de medições horárias de solo</strong> (como as do SONDA)
+  em uma série única utilizável na simulação.</p>
+
+  <h3>O que o PVSyst faz</h3>
+  <table>
+    <tr><th>Aspecto</th><th>Abordagem do PVSyst</th></tr>
+    <tr>
+      <td>Entrada</td>
+      <td>Mínimo de <strong>10 anos consecutivos</strong> de arquivos horários .MET — mesma origem e
+      local, anos completos (janeiro a dezembro), sem duplicatas</td>
+    </tr>
+    <tr>
+      <td>Saída</td>
+      <td>Um <strong>TMY (Typical Meteorological Year)</strong>: ano de 8.760 horas montado escolhendo,
+      para cada mês do calendário, o mês real mais representativo do histórico — preserva a
+      variabilidade real (nuvens, sequências de dias ruins), que a síntese a partir de médias não tem</td>
+    </tr>
+    <tr>
+      <td>Métodos</td>
+      <td>ISO 15927-4:2005 (norma europeia), Sandia (TMY2/NREL), NREL NSRDB atualizado (TMY3+),
+      e pesos personalizados</td>
+    </tr>
+    <tr>
+      <td>Variantes</td>
+      <td><strong>TGY</strong> (peso na irradiância global — o caso fotovoltaico) e
+      <strong>TDY</strong> (peso na direta normal — concentração/CSP)</td>
+    </tr>
+  </table>
+
+  <h3>O que isso significa para o Aurova</h3>
+  <p>O PVSyst confirma que existem <em>dois caminhos legítimos</em> para alimentar um motor de simulação —
+  e nós já temos um deles:</p>
+  <table>
+    <tr><th>Caminho</th><th>PVSyst</th><th>Aurova hoje</th></tr>
+    <tr>
+      <td>Síntese a partir de médias</td>
+      <td>Geração sintética horária a partir de médias mensais (Aguiar &amp; Collares-Pereira)</td>
+      <td>✅ Equivalente: NASA POWER mensal → horário via Collares-Pereira + Erbs</td>
+    </tr>
+    <tr>
+      <td>TMY de medições reais</td>
+      <td>Ferramenta TMY sobre ≥10 anos de dados horários medidos</td>
+      <td>❌ Não temos — é exatamente o que o SONDA viabilizaria</td>
+    </tr>
+  </table>
+  <p>E o SONDA/BRB encaixa quase perfeitamente no requisito de entrada: 2004-2005 + 2010-2018 somam
+  <strong>≈ 10-11 anos</strong> de medições minuto a minuto — no limiar do mínimo exigido pelo PVSyst
+  (a ressalva são as lacunas, que a norma ISO 15927-4 tolera até certo ponto ao selecionar meses
+  representativos).</p>
+
+  <h3>Conclusão do adendo</h3>
+  <p>A referência do PVSyst <strong>reforça e dá metodologia profissional à fase 2</strong>: em vez de
+  consumir o SONDA de forma improvisada (só exibir dias medidos), o caminho correto é o mesmo do PVSyst —
+  pipeline offline que agrega 1 min → horário, aplica controle de qualidade e <strong>monta um TGY por
+  estação</strong> (estatística de Finkelstein-Schafer, ~200 linhas de código). O TGY de 8.760 horas
+  entra então no motor como <em>fonte meteorológica alternativa de nível PVSyst</em>, selecionável
+  quando o projeto estiver perto de uma das 21 estações. A recomendação principal não muda: NASA POWER
+  segue como padrão global; o TGY/SONDA vira o diferencial de precisão onde houver estação.</p>
+</section>
+
+<footer>
+  <span>Aurova Motor Solar — análise técnica de <code style="font-size:11px;">sonda_curvas_diarias.html</code></span>
+  <span>Gerado em 11/06/2026</span>
+</footer>
+
+</div>
+</body>
+</html>

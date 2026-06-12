@@ -1,5 +1,6 @@
 ﻿# Cache e dados temporários
 nasa_cache/
+sonda_dados/
 __pycache__/
 *.pyc
 *.pyo
