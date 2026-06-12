@@ -1295,6 +1295,44 @@ def _daily_series_one(p: dict) -> tuple:
     return daily_egrid, daily_hourly
 
 
+def daily_irradiance(p: dict) -> dict:
+    """Séries 365×24 de irradiância no plano horizontal, em W/m² (inteiros):
+    GHI/DNI/DHI medidos (sonda_hourly) ou sintetizados (CPR/Erbs), mais o GHI
+    de céu limpo (Beer-Lambert simples sobre a ENI) como referência visual.
+    A irradiância é do local (não depende do sub-arranjo)."""
+    lat = float(p['lat']); lon = float(p['lon']); tz = float(p.get('tz', -3))
+    nasa = p['nasa_data'] if p.get('nasa_data') else build_nasa_data(lat, lon)
+    ghi_daily = _interp_daily([nasa['ghi'].get(m, 5.0) for m in range(1, 13)])
+    sonda_h = p.get('sonda_hourly')
+
+    out = {'ghi': [], 'dni': [], 'dhi': [], 'ghi_cs': []}
+    for di in range(365):
+        doy = di + 1
+        dGHI = ghi_daily[di]
+        Kd = calc_daily_kd(doy, dGHI, lat)
+        g = [0] * 24; n = [0] * 24; d = [0] * 24; cs = [0] * 24
+        for hour in range(24):
+            HSun, AzSun, ENI, _, _ = calc_solar_position(
+                doy, hour + 0.5, lat, lon, tz)
+            sin_h = math.sin(math.radians(HSun))
+            if sin_h > 0.035:
+                cs[hour] = int(round(ENI * sin_h * (0.75 ** (1.0 / sin_h))))
+            if sonda_h:
+                g[hour] = int(round(float(sonda_h['ghi'][di][hour])))
+                n[hour] = int(round(float(sonda_h['dni'][di][hour])))
+                d[hour] = int(round(float(sonda_h['dhi'][di][hour])))
+            elif HSun > 2:
+                GHI, DNI, DHI, _, _, _ = calc_ghi_hourly(
+                    doy, hour, dGHI, Kd, lat, lon, tz)
+                g[hour] = int(round(GHI))
+                n[hour] = int(round(DNI))
+                d[hour] = int(round(DHI))
+        out['ghi'].append(g); out['dni'].append(n)
+        out['dhi'].append(d); out['ghi_cs'].append(cs)
+    out['medido'] = bool(sonda_h)
+    return out
+
+
 def simulate_daily(params: dict) -> dict:
     """Análise diária: E_Grid total de cada dia do ano (365) + perfil horário de
     cada dia (365×24). Soma sub-arranjos quando há lista 'subarrays'."""
@@ -1319,6 +1357,7 @@ def simulate_daily(params: dict) -> dict:
     return {
         'daily_egrid':  [round(v, 2) for v in d_egrid],
         'daily_hourly': [[round(v, 2) for v in dia] for dia in d_hourly],
+        'daily_irr':    daily_irradiance(params),
     }
 
 

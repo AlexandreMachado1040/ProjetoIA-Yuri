@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { exportarCSV, exportarPNGs } from '../utils/exportRelatorio'
+import { getDailyAnalysis } from '../api/client'
+import { carregarTGY, achatarHorasTGY } from '../utils/sondaTgy'
 import RelatorioPDF          from './RelatorioPDF'
 import ProducaoMensalChart   from './ProducaoMensalChart'
 import IrradianciaChart      from './IrradianciaChart'
 import DailyEgridChart       from './DailyEgridChart'
+import ExploradorDiario      from './ExploradorDiario'
 import LossDiagram           from './LossDiagram'
 import IVCurveChart          from './IVCurveChart'
 import PowerHistogramChart   from './PowerHistogramChart'
@@ -14,6 +17,42 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
   const [recolhidos, setRecolhidos] = useState({})
   const toggleSub = (idx) =>
     setRecolhidos(r => ({ ...r, [idx]: !r[idx] }))
+
+  // Análise diária (/daily): buscada UMA vez e compartilhada entre o
+  // ExploradorDiario e o DailyEgridChart. Com fonte SONDA, anexa as
+  // 8.760 h medidas do TGY para o motor usar dias reais.
+  const [dailyData, setDailyData]       = useState(null)
+  const [dailyMedido, setDailyMedido]   = useState(null)
+  const [dailyLoading, setDailyLoading] = useState(false)
+  const dailyKey = inputPayload ? JSON.stringify(inputPayload) : null
+
+  useEffect(() => {
+    if (!inputPayload) return
+    setDailyLoading(true); setDailyData(null); setDailyMedido(null)
+
+    const montarPayload = async () => {
+      const st = inputPayload.sonda_tgy
+      if (!st?.arquivo) return { payload: inputPayload, medida: null }
+      try {
+        const horas = achatarHorasTGY(await carregarTGY(st.arquivo))
+        return {
+          payload: { ...inputPayload, sonda_tgy: { ...st, horas } },
+          medida: st.estacao,
+        }
+      } catch (err) {
+        console.warn('TGY horário indisponível, usando síntese:', err)
+        return { payload: inputPayload, medida: null }
+      }
+    }
+
+    montarPayload()
+      .then(({ payload, medida }) => getDailyAnalysis(payload).then(d => {
+        setDailyData(d)
+        setDailyMedido(medida)
+        setDailyLoading(false)
+      }))
+      .catch(() => setDailyLoading(false))
+  }, [dailyKey])
 
   // Exportação de PNGs é assíncrona (um download por gráfico).
   const [exportandoPng, setExportandoPng] = useState(false)
@@ -184,7 +223,9 @@ export default function ResultsDashboard({ resultado, inputPayload }) {
         bifacial={bifacial}
       />
 
-      <DailyEgridChart inputPayload={inputPayload} />
+      <ExploradorDiario daily={dailyData} medido={dailyMedido} loading={dailyLoading} />
+
+      <DailyEgridChart daily={dailyData} medido={dailyMedido} loading={dailyLoading} />
 
       {!is_plant && <PowerHistogramChart resultado={resultado} />}
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getModulos, getInversores } from '../api/client'
 import ESTACOES_SONDA from '../data/sonda_estacoes.json'
+import { carregarTGY } from '../utils/sondaTgy'
 
 // Parâmetros globais (site + perdas), comuns a todos os sub-arranjos.
 const GLOBAL_DEFAULTS = {
@@ -39,17 +40,6 @@ function distanciaKm(lat1, lon1, lat2, lon2) {
             Math.cos(lat1 * r) * Math.cos(lat2 * r) *
             Math.sin((lon2 - lon1) * r / 2) ** 2
   return 12742 * Math.asin(Math.sqrt(a))
-}
-
-// Cache do TGY por arquivo (84 kB; baixa uma vez por sessão)
-const _tgyCache = {}
-async function carregarTGY(arquivo) {
-  if (!_tgyCache[arquivo]) {
-    const resp = await fetch(arquivo)
-    if (!resp.ok) throw new Error(`TGY HTTP ${resp.status}`)
-    _tgyCache[arquivo] = await resp.json()
-  }
-  return _tgyCache[arquivo]
 }
 
 // Tipos de montagem térmica (U-value PVSyst) — espelha MONTAGEM_PRESETS do motor.
