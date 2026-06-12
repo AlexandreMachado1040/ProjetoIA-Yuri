@@ -70,16 +70,18 @@ export default function ConfigForm({ onSubmit, loading }) {
   const [catalogError,   setCatalogError]   = useState(false)
 
   // Fonte de irradiância: 'nasa' (padrão) ou 'sonda' (TGY medido em solo).
-  // Só oferecida quando o local está a até RAIO_SONDA_KM de uma estação.
+  // O seletor é sempre visível; a opção SONDA só habilita quando o local
+  // está a até RAIO_SONDA_KM da estação mais próxima.
   const [fonteIrr, setFonteIrr] = useState('nasa')
-  const estacaoProxima = ESTACOES_SONDA
+  const estacaoMaisProxima = ESTACOES_SONDA
     .map(e => ({ ...e, dist: distanciaKm(form.lat, form.lon, e.lat, e.lon) }))
-    .filter(e => e.dist <= RAIO_SONDA_KM)
-    .sort((a, b) => a.dist - b.dist)[0] ?? null
+    .sort((a, b) => a.dist - b.dist)[0]
+  const sondaDisponivel = estacaoMaisProxima.dist <= RAIO_SONDA_KM
+  const estacaoProxima  = sondaDisponivel ? estacaoMaisProxima : null
 
   useEffect(() => {
-    if (!estacaoProxima && fonteIrr !== 'nasa') setFonteIrr('nasa')
-  }, [estacaoProxima, fonteIrr])
+    if (!sondaDisponivel && fonteIrr !== 'nasa') setFonteIrr('nasa')
+  }, [sondaDisponivel, fonteIrr])
 
   const loadCatalog = useCallback(() => {
     setCatalogLoading(true)
@@ -218,29 +220,33 @@ export default function ConfigForm({ onSubmit, loading }) {
         {field('Longitude (°)', 'lon')}
         {field('Fuso horário (UTC)', 'tz', 'number', 1)}
 
-        {estacaoProxima && (
-          <>
-            <label className="field">
-              <span>Fonte de irradiância</span>
-              <select value={fonteIrr} onChange={e => setFonteIrr(e.target.value)}>
-                <option value="nasa">NASA POWER (satélite — padrão)</option>
-                <option value="sonda">
-                  SONDA {estacaoProxima.sigla} — medido em solo (TGY)
-                </option>
-              </select>
-            </label>
-            {fonteIrr === 'sonda' && (
-              <p style={{
-                fontSize: '0.72rem', color: 'var(--text-sub, #8b95c0)',
-                margin: '2px 2px 8px', lineHeight: 1.5,
-              }}>
-                Ano típico (TGY) montado de medições minuto a minuto da estação{' '}
-                {estacaoProxima.nome} ({estacaoProxima.dist.toFixed(0)} km do local) —
-                SONDA/INPE, CC BY 4.0. Temperatura permanece da NASA POWER.
-              </p>
-            )}
-          </>
-        )}
+        <label className="field">
+          <span>Fonte de irradiância</span>
+          <select value={fonteIrr} onChange={e => setFonteIrr(e.target.value)}>
+            <option value="nasa">NASA POWER (satélite — padrão)</option>
+            <option value="sonda" disabled={!sondaDisponivel}>
+              {sondaDisponivel
+                ? `SONDA ${estacaoMaisProxima.sigla} — medido em solo (TGY)`
+                : `SONDA — sem estação a até ${RAIO_SONDA_KM} km`}
+            </option>
+          </select>
+        </label>
+        <p style={{
+          fontSize: '0.72rem', color: 'var(--text-sub, #8b95c0)',
+          margin: '2px 2px 8px', lineHeight: 1.5,
+        }}>
+          {fonteIrr === 'sonda' && estacaoProxima ? (
+            <>Ano típico (TGY) montado de medições minuto a minuto da estação{' '}
+            {estacaoProxima.nome} ({estacaoProxima.dist.toFixed(0)} km do local) —
+            SONDA/INPE, CC BY 4.0. Temperatura permanece da NASA POWER.</>
+          ) : (
+            <>Estação SONDA mais próxima: {estacaoMaisProxima.nome}{' '}
+            ({estacaoMaisProxima.sigla}), a {estacaoMaisProxima.dist.toFixed(0)} km.{' '}
+            {sondaDisponivel
+              ? 'Selecione SONDA para usar medições de solo.'
+              : `Medições de solo disponíveis a até ${RAIO_SONDA_KM} km da estação — ex.: Brasília (lat −15,6 / lon −47,7).`}</>
+          )}
+        </p>
       </section>
 
       {catalogError && (
