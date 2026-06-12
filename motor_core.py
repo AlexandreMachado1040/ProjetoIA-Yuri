@@ -1248,6 +1248,11 @@ def _daily_series_one(p: dict) -> tuple:
     ghi_daily = _interp_daily([NASA_GHI.get(m, 5.0) for m in range(1, 13)])
     t_daily   = _interp_daily([NASA_T2M.get(m, 22.0) for m in range(1, 13)])
 
+    # Séries horárias medidas (TGY SONDA): {'ghi','dni','dhi'} com 365×24 em
+    # W/m² médios da hora. Quando presentes, substituem a síntese
+    # Collares-Pereira/Erbs — cada dia passa a ser um dia real medido.
+    sonda_h = p.get('sonda_hourly')
+
     daily_egrid = [0.0] * 365
     daily_hourly = [[0.0] * 24 for _ in range(365)]
     for di in range(365):
@@ -1258,9 +1263,23 @@ def _daily_series_one(p: dict) -> tuple:
         bf = bif_factor[mi]; s_soil = soil_frac[mi]
         tot = 0.0
         for hour in range(24):
-            GHI, DNI, DHI, HSun, AzSun, ENI = calc_ghi_hourly(doy, hour, dGHI, Kd, lat, lon, tz)
-            if GHI < 1.0 or HSun <= 2:
-                continue
+            if sonda_h:
+                GHI = float(sonda_h['ghi'][di][hour])
+                if GHI < 1.0:
+                    continue
+                HSun, AzSun, ENI, _, _ = calc_solar_position(
+                    doy, hour + 0.5, lat, lon, tz)
+                if HSun <= 2:
+                    continue
+                DNI = float(sonda_h['dni'][di][hour])
+                DHI = float(sonda_h['dhi'][di][hour])
+                if DNI <= 0.0 and DHI <= 0.0:
+                    DHI = GHI       # sensores de feixe/difusa ausentes na hora
+            else:
+                GHI, DNI, DHI, HSun, AzSun, ENI = calc_ghi_hourly(
+                    doy, hour, dGHI, Kd, lat, lon, tz)
+                if GHI < 1.0 or HSun <= 2:
+                    continue
             Gf, _ = calc_ft_frontal(HSun, AzSun, GHI, DNI, DHI, ENI, albedo, tilt, az_panel)
             Gb = Gf * bf
             T_cell = T_amb + Gf * 0.9 * (1 - 0.235) / U_value
@@ -1281,7 +1300,7 @@ def simulate_daily(params: dict) -> dict:
     cada dia (365×24). Soma sub-arranjos quando há lista 'subarrays'."""
     if params.get('subarrays'):
         shared_keys = ('lat', 'lon', 'tz', 'nasa_data', 'nasa_source_label',
-                       'N_seg', 'N_rays', 'albedo',
+                       'sonda_hourly', 'N_seg', 'N_rays', 'albedo',
                        'vento_ms', 'perda_cabo_cc_pct', 'perda_sujidade_pct',
                        'perda_sujidade_mensal', 'tipo_montagem', 'Uc', 'Uv',
                        'degradacao_anual_pct', 'ano_operacao')

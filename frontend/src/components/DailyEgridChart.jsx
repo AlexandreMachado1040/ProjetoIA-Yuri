@@ -15,24 +15,62 @@ function doyToLabel(doy) {
   return `${String(dia).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}`
 }
 
+// Cache do TGY completo (8.760 h) por arquivo — compartilhado na sessão.
+const _tgyDiasCache = {}
+async function carregarHorasTGY(arquivo) {
+  if (!_tgyDiasCache[arquivo]) {
+    const resp = await fetch(arquivo)
+    if (!resp.ok) throw new Error(`TGY HTTP ${resp.status}`)
+    const tgy = await resp.json()
+    // Achata meses → 365 dias × 24 h (W/m² médios da hora)
+    const ghi = [], dni = [], dhi = []
+    for (const m of tgy.meses) {
+      for (const d of m.dias) { ghi.push(d.ghi); dni.push(d.dni); dhi.push(d.dhi) }
+    }
+    _tgyDiasCache[arquivo] = { ghi, dni, dhi }
+  }
+  return _tgyDiasCache[arquivo]
+}
+
 export default function DailyEgridChart({ inputPayload }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
   const [diaSel, setDiaSel]   = useState(0)   // índice 0-364
+  const [medido, setMedido]   = useState(null) // sigla da estação (dias reais)
 
   const key = inputPayload ? JSON.stringify(inputPayload) : null
 
   useEffect(() => {
     if (!inputPayload) return
-    setLoading(true); setError(null); setData(null)
-    getDailyAnalysis(inputPayload)
-      .then(d => {
-        setData(d)
-        const de = d.daily_egrid ?? []
-        setDiaSel(de.length ? de.indexOf(Math.max(...de)) : 0)
-        setLoading(false)
-      })
+    setLoading(true); setError(null); setData(null); setMedido(null)
+
+    // Fonte SONDA: anexa as 8.760 h medidas para o motor usar dias reais.
+    // Se o TGY falhar, segue com a síntese climatológica (sem bloquear).
+    const montarPayload = async () => {
+      const st = inputPayload.sonda_tgy
+      if (!st?.arquivo) return { payload: inputPayload, medida: null }
+      try {
+        const horas = await carregarHorasTGY(st.arquivo)
+        return {
+          payload: { ...inputPayload, sonda_tgy: { ...st, horas } },
+          medida: st.estacao,
+        }
+      } catch (err) {
+        console.warn('TGY horário indisponível, usando síntese:', err)
+        return { payload: inputPayload, medida: null }
+      }
+    }
+
+    montarPayload()
+      .then(({ payload, medida }) => getDailyAnalysis(payload)
+        .then(d => {
+          setData(d)
+          setMedido(medida)
+          const de = d.daily_egrid ?? []
+          setDiaSel(de.length ? de.indexOf(Math.max(...de)) : 0)
+          setLoading(false)
+        }))
       .catch(e => { setError(String(e?.message ?? e)); setLoading(false) })
   }, [key])
 
@@ -61,8 +99,23 @@ export default function DailyEgridChart({ inputPayload }) {
 
   return (
     <div className="chart-card">
-      <h3>Análise Diária — E_Grid ao longo do ano (365 dias)</h3>
+      <h3>
+        Análise Diária — E_Grid ao longo do ano (365 dias)
+        {medido && (
+          <span style={{
+            marginLeft: 10, fontSize: '0.68rem', fontWeight: 600,
+            background: 'rgba(16,185,129,0.14)', border: '1px solid rgba(16,185,129,0.4)',
+            color: '#34d399', borderRadius: 5, padding: '2px 8px',
+            verticalAlign: 2, whiteSpace: 'nowrap',
+          }}>
+            ● dias medidos — SONDA {medido}
+          </span>
+        )}
+      </h3>
       <p className="chart-sub">
+        {medido
+          ? `Ano típico (TGY) com dias reais da estação ${medido} — nuvens e variabilidade meteorológica medidas. `
+          : ''}
         Total anual: <strong>{(totalAno / 1000).toFixed(1)} MWh</strong>
         &nbsp;·&nbsp; Média/dia: <strong>{media.toFixed(1)} kWh</strong>
         &nbsp;·&nbsp; Pico: <strong>{daily[idxPico].toFixed(1)} kWh</strong> ({doyToLabel(idxPico + 1)})

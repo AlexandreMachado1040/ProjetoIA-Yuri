@@ -178,6 +178,20 @@ async def on_fetch(request, env):
                 except Exception:
                     sonda_label = None   # TGY malformado → segue só com NASA
 
+            # Séries horárias medidas (365×24) — usadas pela análise diária
+            # para exibir dias reais em vez da síntese climatológica.
+            sonda_hourly = None
+            if sonda and sonda_label and isinstance(sonda.get("horas"), dict):
+                try:
+                    horas = sonda["horas"]
+                    sh = {k: [[float(x) for x in dia] for dia in horas[k]]
+                          for k in ("ghi", "dni", "dhi")}
+                    if all(len(sh[k]) == 365 and
+                           all(len(d) == 24 for d in sh[k]) for k in sh):
+                        sonda_hourly = sh
+                except Exception:
+                    sonda_hourly = None  # horas malformadas → síntese padrão
+
             params = {
                 "lat":        lat,
                 "lon":        lon,
@@ -204,6 +218,7 @@ async def on_fetch(request, env):
                 "inversor":   inv,
                 "nasa_data":  nasa_data,   # None → simulate_fast usa fallback SP
                 "nasa_source_label": sonda_label,   # None → rótulo padrão NASA
+                "sonda_hourly": sonda_hourly,       # 365×24 medidos (ou None)
             }
 
             # Múltiplos sub-arranjos? Resolve cada um e usa simulate_plant.

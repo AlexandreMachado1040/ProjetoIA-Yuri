@@ -159,6 +159,7 @@ export default function ConfigForm({ onSubmit, loading }) {
         const tgy = await carregarTGY(estacaoProxima.arquivo)
         base.sonda_tgy = {
           estacao: tgy.estacao,
+          arquivo: estacaoProxima.arquivo,   // p/ análise diária buscar as 8.760 h
           ghi: tgy.ghi_mensal_kwh_dia,
           dni: tgy.dni_mensal_kwh_dia,
           dhi: tgy.dhi_mensal_kwh_dia,
